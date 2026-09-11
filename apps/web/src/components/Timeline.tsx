@@ -54,7 +54,8 @@ interface DragState {
 }
 
 export function Timeline() {
-  const { zoom, origin, blocks, tasks, snapDisabled, saveBlock, scheduleTask, select } = useStore();
+  const { zoom, origin, blocks, tasks, snapDisabled, saveBlock, scheduleTask, revealTask } =
+    useStore();
   const spec = ZOOMS[zoom];
   const vertical = spec.vertical;
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -292,7 +293,7 @@ export function Timeline() {
                 style={style}
                 title={`${task?.title ?? item.title ?? ''}\n${fmt(item.start_at)} – ${fmt(item.end_at)}`}
                 onPointerDown={(e) => onPointerDown(e, item, 'move')}
-                onClick={() => item.task_id && select(item.task_id)}
+                onClick={() => item.task_id && revealTask(item.task_id)}
               >
                 {task?.title ?? item.title}
                 {vertical && size > 30 && (

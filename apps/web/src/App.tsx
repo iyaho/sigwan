@@ -1,5 +1,6 @@
 import type * as React from 'react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AddTask } from './components/AddTask';
 import { DetailPanel } from './components/DetailPanel';
 import { Sidebar } from './components/Sidebar';
 import { Splitter } from './components/Splitter';
@@ -13,6 +14,7 @@ export default function App() {
   const { ready, load, setZoom, setOrigin } = useStore();
   const { sidebarPx, listPct, detailMode, set, commit, reset, toggleDetailMode } = useLayout();
   const mainRef = useRef<HTMLElement>(null);
+  const [addOpen, setAddOpen] = useState(false);
 
   useEffect(() => {
     void load();
@@ -25,6 +27,10 @@ export default function App() {
       if (el?.tagName === 'INPUT' || el?.isContentEditable) return;
       const z = { '1': 'day', '2': 'week', '3': 'month', '4': 'quarter' } as const;
       if (e.key in z) setZoom(z[e.key as keyof typeof z]);
+      if (e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setAddOpen(true);
+      }
       if (e.key.toLowerCase() === 't') {
         const n = new Date();
         setOrigin(new Date(n.getFullYear(), n.getMonth(), n.getDate()));
@@ -91,9 +97,16 @@ export default function App() {
             할 일 — 리스트에서 위 타임라인으로 끌어다 놓으면 블록이 생긴다
             <button
               type="button"
+              onClick={() => setAddOpen(true)}
+              className="primary-btn primary-btn-sm"
+              style={{ marginLeft: 'auto' }}
+            >
+              + 할 일 (N)
+            </button>
+            <button
+              type="button"
               onClick={toggleDetailMode}
               className="ghost-btn"
-              style={{ marginLeft: 'auto' }}
               title="상세를 오른쪽 패널로 볼지, 리스트에서 펼칠지"
             >
               상세: {detailMode === 'panel' ? '오른쪽 패널' : '리스트 펼침'}
@@ -113,6 +126,7 @@ export default function App() {
       </main>
 
       {detailMode === 'panel' && <DetailPanel />}
+      <AddTask open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   );
 }

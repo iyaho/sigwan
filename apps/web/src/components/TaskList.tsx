@@ -2,12 +2,9 @@ import type { Tag, Task } from '@sigwan/core';
 import { GRADE_COLOR, priorityScore, sortByPriority } from '@sigwan/core';
 import { useMemo } from 'react';
 import { useLayout } from '../lib/layout';
+import { filterByView } from '../lib/views';
 import { useStore } from '../store';
 import { TaskDetail } from './TaskDetail';
-
-function localDate(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 export function TaskList() {
   const { tasks, view, selectedTagIds, taskTags, tags, selectedTaskId, select, toggleDone } =
@@ -17,37 +14,11 @@ export function TaskList() {
 
   const rows = useMemo(() => {
     const now = new Date();
-    let list = tasks.filter((t) => !t.deleted_at);
-
-    switch (view) {
-      case 'today':
-        list = list.filter(
-          (t) =>
-            t.status !== 'done' &&
-            (t.day_of === localDate(now) ||
-              (!!t.due_at && Date.parse(t.due_at) <= now.getTime() + 864e5)),
-        );
-        break;
-      case 'next7':
-        list = list.filter(
-          (t) =>
-            t.status !== 'done' && !!t.due_at && Date.parse(t.due_at) <= now.getTime() + 7 * 864e5,
-        );
-        break;
-      case 'inbox':
-        list = list.filter((t) => t.kind === 'someday' && t.status !== 'done');
-        break;
-      case 'done':
-        list = list.filter((t) => t.status === 'done');
-        break;
-      default:
-        list = list.filter((t) => t.status !== 'done');
-    }
-
+    let list = filterByView(tasks, view, now);
     if (selectedTagIds.length) {
       list = list.filter((t) => (taskTags[t.id] ?? []).some((id) => selectedTagIds.includes(id)));
     }
-    // 인박스는 점수 정렬 대상이 아니므로 수동 순서를 유지한다 (2장)
+    // 인박스·완료함은 점수 정렬 대상이 아니므로 수동 순서를 유지한다 (2장)
     return view === 'inbox' || view === 'done' ? list : sortByPriority(list, now);
   }, [tasks, view, selectedTagIds, taskTags]);
 

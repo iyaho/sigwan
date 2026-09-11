@@ -198,3 +198,112 @@ body:has(.splitter-y[data-dragging='true']) { cursor: row-resize; }
 .empty { padding: var(--sp-5); color: var(--text-faint); font-size: var(--fs-sm); text-align: center; }
 
 .grade-pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--fs-xs); color: #fff; font-weight: 600; }
+
+/* ── 할 일 추가 폼 (3.3) ────────────────────────────────────────────── */
+.primary-btn {
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--r-md);
+  padding: 6px 14px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.primary-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.primary-btn-sm { padding: 3px 10px; font-size: var(--fs-xs); }
+
+.add-dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-panel);
+  color: var(--text);
+  padding: 0;
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(88vh, 760px);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.28);
+}
+.add-dialog::backdrop { background: rgb(0 0 0 / 0.35); }
+.add-dialog form { display: flex; flex-direction: column; max-height: inherit; }
+
+.add-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.add-head strong { font-size: var(--fs-lg); }
+.add-head .ghost-btn { margin-left: auto; }
+
+.add-body { padding: var(--sp-4); overflow: auto; }
+
+.fld { display: block; margin-bottom: var(--sp-4); }
+.fld-inline { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); }
+.fld-label {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  margin-bottom: 5px;
+  letter-spacing: 0.02em;
+}
+.sub-row { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); flex-wrap: wrap; }
+.sub-label { font-size: var(--fs-xs); color: var(--text-faint); }
+.hint { font-size: var(--fs-xs); color: var(--text-faint); margin: 6px 0 0; }
+
+.txt {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+.txt:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+.txt-sm { width: auto; min-width: 120px; }
+textarea.txt { resize: vertical; }
+
+/* 칩 — 3.3-2: 탭 한 번으로 정해지는 것들 */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: var(--fs-sm);
+}
+.chip:hover { border-color: var(--accent); color: var(--text); }
+.chip[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.chip-num { min-width: 38px; justify-content: center; }
+/* 「직접」은 옆에 작게 — 명세가 칩보다 한 단계 낮게 두라고 한 것 */
+.chip-alt { border-style: dashed; font-size: var(--fs-xs); padding: 4px 10px; }
+
+.more { margin-top: var(--sp-5); border-top: 1px solid var(--border); padding-top: var(--sp-3); }
+.more > summary {
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  margin-bottom: var(--sp-3);
+  list-style: revert;
+}
+
+.add-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border);
+  background: var(--bg-sunken);
+}
+.add-preview { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex: 1; }
+.add-preview-text { font-size: var(--fs-xs); color: var(--text-dim); line-height: 1.35; }
