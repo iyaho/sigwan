@@ -33,17 +33,34 @@ const LANE_W = 148; // 세로 뷰에서 레인 하나 폭
 const LANE_H = 26; // 가로 뷰에서 레인 하나 높이
 const ROW_GAP = 4;
 
-type DragState =
-  | { mode: 'move'; id: string; startPx: number; origStart: number; origEnd: number }
-  | { mode: 'resize'; id: string; startPx: number; origStart: number; origEnd: number }
-  | null;
+/** 3px 미만은 드래그가 아니라 클릭이다. 클릭이 데이터를 바꾸면 안 된다. */
+const DRAG_THRESHOLD_PX = 3;
+
+interface DragState {
+  mode: 'move' | 'resize';
+  id: string;
+  startPx: number;
+  origStart: number;
+  origEnd: number;
+  /**
+   * 드래그 시작 시점의 인라인 style 문자열.
+   *
+   * 여기가 함정이었다 — 드래그 중에 el.style.height를 직접 만지고 끝나서 ''로 지우면,
+   * React는 자기가 마지막에 쓴 값(예: 36px)과 다음 렌더 값이 같다고 보고 다시 안 쓴다.
+   * 그래서 지운 채로 남아 막대가 내용 크기(113×32)로 쪼그라든다.
+   * 지우지 말고 '원래 값으로 되돌린다'.
+   */
+  origStyle: { height: string; width: string };
+}
 
 export function Timeline() {
   const { zoom, origin, blocks, tasks, snapDisabled, saveBlock, scheduleTask, select } = useStore();
   const spec = ZOOMS[zoom];
   const vertical = spec.vertical;
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [drag, setDrag] = useState<DragState>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  /** 실제로 움직였는가. 리렌더를 유발하면 안 되므로 ref다. */
+  const moved = useRef(false);
   const [, force] = useState(0);
 
   // Alt 누르면 스냅 해제 (3.2)
@@ -102,12 +119,15 @@ export function Timeline() {
     e.preventDefault();
     e.stopPropagation();
     (e.target as Element).setPointerCapture(e.pointerId);
+    const el = elRef.current[b.id];
+    moved.current = false;
     setDrag({
       mode,
       id: b.id,
       startPx: vertical ? e.clientY : e.clientX,
       origStart: Date.parse(b.start_at),
       origEnd: Date.parse(b.end_at),
+      origStyle: { height: el?.style.height ?? '', width: el?.style.width ?? '' },
     });
   }
 
@@ -116,6 +136,7 @@ export function Timeline() {
     const el = elRef.current[drag.id];
     if (!el) return;
     const delta = (vertical ? e.clientY : e.clientX) - drag.startPx;
+    if (Math.abs(delta) >= DRAG_THRESHOLD_PX) moved.current = true;
     const deltaMin = delta / spec.pxPerMinute;
     const step = snapDisabled ? 1 : spec.snapMinutes;
     const snappedMin = Math.round(deltaMin / step) * step;
@@ -137,13 +158,17 @@ export function Timeline() {
     const delta = (vertical ? e.clientY : e.clientX) - drag.startPx;
     const deltaMin = delta / spec.pxPerMinute;
     const b = blocks.find((x) => x.id === drag.id);
+    const wasMoved = moved.current;
     setDrag(null);
+    moved.current = false;
     if (el) {
+      // transform은 React가 안 쓰는 속성이라 지워도 되지만, height/width는 React 것이다.
       el.style.transform = '';
-      el.style.height = '';
-      el.style.width = '';
+      el.style.height = drag.origStyle.height;
+      el.style.width = drag.origStyle.width;
     }
-    if (!b) return;
+    // 클릭은 선택만 한다. 여기서 저장하면 스냅이 걸려 시각이 최대 ±7.5분 조용히 움직인다.
+    if (!b || !wasMoved) return;
 
     if (drag.mode === 'move') {
       const start = snap(new Date(drag.origStart + deltaMin * 60_000), zoom, !snapDisabled);
