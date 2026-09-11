@@ -38,6 +38,12 @@ interface State {
   /** 인박스 Task를 타임라인에 떨어뜨림 → Block 생성 (3.2) */
   scheduleTask: (taskId: string, startAt: Date) => Promise<void>;
 
+  /** 태그 CRUD (3.4). 계층 없음 — 필요하면 이름에 슬래시를 쓴다. */
+  addTag: (name: string, color: string) => Promise<string | null>;
+  updateTag: (id: string, patch: Partial<Pick<Tag, 'name' | 'color'>>) => Promise<void>;
+  removeTag: (id: string) => Promise<void>;
+  setTaskTags: (taskId: string, tagIds: string[]) => Promise<void>;
+
   /** 3.3 추가 폼에서 호출. kind는 이미 입력에서 결정돼 들어온다. */
   addTask: (
     draft: Partial<Task> & { title: string },
@@ -131,6 +137,57 @@ export const useStore = create<State>((set, get) => ({
   async removeBlock(id) {
     await repos.blocks.remove(id);
     set((s) => ({ blocks: s.blocks.filter((b) => b.id !== id) }));
+  },
+
+  async addTag(name, color) {
+    const clean = name.trim();
+    if (!clean) return null;
+    // UNIQUE(user_id, name) — 5장. 로컬에서도 같은 규칙을 지킨다.
+    if (get().tags.some((t) => t.name === clean && !t.deleted_at)) return null;
+    const tag = await repos.tags.upsert({
+      id: newId(),
+      user_id: 'local-user',
+      name: clean,
+      color,
+      sort_order: get().tags.length,
+      deleted_at: null,
+      rev: 0,
+    });
+    set((s) => ({ tags: [...s.tags, tag] }));
+    return tag.id;
+  },
+
+  async updateTag(id, patch) {
+    const cur = get().tags.find((t) => t.id === id);
+    if (!cur) return;
+    if (patch.name !== undefined) {
+      const clean = patch.name.trim();
+      if (!clean) return;
+      if (get().tags.some((t) => t.id !== id && t.name === clean && !t.deleted_at)) return;
+      patch = { ...patch, name: clean };
+    }
+    const saved = await repos.tags.upsert({ ...cur, ...patch });
+    set((s) => ({ tags: s.tags.map((t) => (t.id === id ? saved : t)) }));
+  },
+
+  async removeTag(id) {
+    await repos.tags.remove(id); // 툼스톤. 물리 삭제하지 않는다 (7장)
+    set((s) => {
+      const taskTags: Record<string, string[]> = {};
+      for (const [taskId, ids] of Object.entries(s.taskTags)) {
+        taskTags[taskId] = ids.filter((x) => x !== id);
+      }
+      return {
+        tags: s.tags.filter((t) => t.id !== id),
+        selectedTagIds: s.selectedTagIds.filter((x) => x !== id),
+        taskTags,
+      };
+    });
+  },
+
+  async setTaskTags(taskId, tagIds) {
+    await repos.tags.setTaskTags(taskId, tagIds);
+    set((s) => ({ taskTags: { ...s.taskTags, [taskId]: tagIds } }));
   },
 
   async addTask(draft, opts = {}) {

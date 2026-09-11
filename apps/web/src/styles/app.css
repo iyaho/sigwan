@@ -307,3 +307,77 @@ textarea.txt { resize: vertical; }
 }
 .add-preview { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex: 1; }
 .add-preview-text { font-size: var(--fs-xs); color: var(--text-dim); line-height: 1.35; }
+
+/* ── 태그 관리 (3.4) ────────────────────────────────────────────────── */
+.tag-head { display: flex; align-items: center; gap: 4px; }
+.tag-head > span { flex: 1; }
+
+.icon-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+.icon-btn:hover { background: var(--bg-sunken); color: var(--text); }
+.icon-btn[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); }
+.icon-btn.danger {
+  background: var(--grade-now);
+  color: #fff;
+  font-size: var(--fs-xs);
+  padding: 2px 7px;
+}
+
+.tag-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--sp-3) var(--sp-2);
+  flex-wrap: wrap;
+}
+.tag-form-err { width: 100%; color: var(--grade-now); margin: 0; }
+
+.tag-row { display: flex; align-items: center; gap: 6px; padding: 2px var(--sp-3); }
+.tag-row-name { flex: 1; min-width: 0; width: auto; }
+
+.color-pick { position: relative; display: inline-flex; }
+.swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid rgb(0 0 0 / 0.15);
+  padding: 0;
+  flex: 0 0 auto;
+}
+.swatch[aria-pressed='true'] { outline: 2px solid var(--text); outline-offset: 1px; }
+.palette {
+  position: absolute;
+  top: 22px;
+  left: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(3, 16px);
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+}
+
+/* 상세의 마감 편집 */
+.due-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.due-row .txt-sm { min-width: 0; font-size: var(--fs-xs); padding: 3px 6px; }
+.due-row input[type='date'] { width: 132px; }
+.due-row input[type='time'] { width: 96px; }
+.due-row input:disabled { opacity: 0.5; }
+.chips-sm .chip { padding: 2px 8px; font-size: var(--fs-xs); }
+.kv dd .hint { margin: 3px 0 0; }
+.offview-badge {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  padding: 0 4px;
+  color: var(--text-faint);
+}

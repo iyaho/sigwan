@@ -179,7 +179,8 @@ class LocalTagRepo implements TagRepo {
   async tagsOf(taskId: string) {
     const links = await db.task_tags.where('task_id').equals(taskId).toArray();
     const tags = await db.tags.bulkGet(links.map((l) => l.tag_id));
-    return tags.filter((t): t is Tag => !!t);
+    // 툼스톤된 태그는 안 돌려준다 — 안 그러면 지운 태그가 할 일 줄에 계속 보인다
+    return tags.filter((t): t is Tag => !!t && !t.deleted_at);
   }
 }
 

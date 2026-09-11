@@ -18,9 +18,21 @@ export function TaskList() {
     if (selectedTagIds.length) {
       list = list.filter((t) => (taskTags[t.id] ?? []).some((id) => selectedTagIds.includes(id)));
     }
+    // 고른 줄은 뷰 조건에서 벗어나도 목록에 남긴다.
+    // 상세에서 마감을 고치면 그 줄이 필터 밖으로 나가는데, 그때 편집하던 칸이
+    // 통째로 사라지면 무슨 일이 일어난 건지 알 수가 없다.
+    if (selectedTaskId && !list.some((t) => t.id === selectedTaskId)) {
+      const sel = tasks.find((t) => t.id === selectedTaskId && !t.deleted_at);
+      if (sel) list = [...list, sel];
+    }
     // 인박스·완료함은 점수 정렬 대상이 아니므로 수동 순서를 유지한다 (2장)
     return view === 'inbox' || view === 'done' ? list : sortByPriority(list, now);
-  }, [tasks, view, selectedTagIds, taskTags]);
+  }, [tasks, view, selectedTagIds, taskTags, selectedTaskId]);
+
+  const inView = useMemo(
+    () => new Set(filterByView(tasks, view).map((t) => t.id)),
+    [tasks, view],
+  );
 
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);
 
@@ -35,6 +47,7 @@ export function TaskList() {
             <Row
               task={t}
               selected={open}
+              offView={!inView.has(t.id)}
               inline={inline}
               open={open}
               tagNames={(taskTags[t.id] ?? []).map((id) => tagById.get(id)).filter(Boolean)}
@@ -63,6 +76,7 @@ export function TaskList() {
 function Row({
   task,
   selected,
+  offView,
   inline,
   open,
   tagNames,
@@ -71,6 +85,7 @@ function Row({
 }: {
   task: Task;
   selected: boolean;
+  offView: boolean;
   inline: boolean;
   open: boolean;
   tagNames: (Tag | undefined)[];
@@ -107,6 +122,7 @@ function Row({
           <span>중요도 {task.importance}</span>
           {task.estimate_is_ai && <span className="ai-badge">AI 추정</span>}
           {task.pinned && <span>📌</span>}
+          {offView && <span className="offview-badge">이 뷰 밖</span>}
           {tagNames.map(
             (t) =>
               t && (

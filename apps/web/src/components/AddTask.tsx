@@ -2,6 +2,7 @@ import type { Task } from '@sigwan/core';
 import { GRADE_COLOR, GRADE_LABEL, priorityScore, sortByPriority } from '@sigwan/core';
 import type * as React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { dueFields } from '../lib/taskDate';
 import { useStore } from '../store';
 
 /**
@@ -97,10 +98,12 @@ export function AddTask({ open, onClose }: { open: boolean; onClose: () => void 
 
   // 3.3-3 — kind는 입력이 결정한다
   const draft = useMemo((): Partial<Task> & { title: string } => {
-    const base = { title: title || '(제목 없음)', estimate_min: estMin, importance };
-    if (!dateStr) return { ...base, kind: 'someday' };
-    if (!timeStr) return { ...base, kind: 'day', day_of: dateStr };
-    return { ...base, kind: 'deadline', due_at: new Date(`${dateStr}T${timeStr}:00`).toISOString() };
+    return {
+      title: title || '(제목 없음)',
+      estimate_min: estMin,
+      importance,
+      ...dueFields(dateStr, timeStr),
+    };
   }, [title, dateStr, timeStr, estMin, importance]);
 
   // 3.3-4 — 저장 전 등급·순위 미리보기. 중요도를 4→5로 바꾸면 여기가 즉시 바뀐다.
