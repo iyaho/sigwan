@@ -1,0 +1,44 @@
+/* 16.8-5 디자인 토큰 — 색·간격·타이포. 화면 코드는 여기 변수만 쓴다. */
+:root {
+  --bg: #fcfcfd;
+  --bg-panel: #ffffff;
+  --bg-sunken: #f4f4f6;
+  --border: #e3e3e8;
+  --border-strong: #cdced6;
+  --text: #1c1c1f;
+  --text-dim: #6b6b75;
+  --text-faint: #9a9aa4;
+  --accent: #3e63dd;
+  --accent-soft: #e6ebfe;
+  --weekend: #f7f7f9;
+  --now-line: #e5484d;
+
+  --grade-now: #e5484d;
+  --grade-today: #f76b15;
+  --grade-week: #3e63dd;
+  --grade-later: #8b8d98;
+
+  --r-sm: 4px;
+  --r-md: 7px;
+  --r-lg: 11px;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px;
+  --font: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --mono: 'SF Mono', ui-monospace, Menlo, monospace;
+  --fs-xs: 11px; --fs-sm: 12.5px; --fs-md: 14px; --fs-lg: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111113;
+    --bg-panel: #18181b;
+    --bg-sunken: #1f1f23;
+    --border: #2a2a2f;
+    --border-strong: #3d3d44;
+    --text: #eeeef0;
+    --text-dim: #a0a0aa;
+    --text-faint: #6e6e78;
+    --accent: #6e8dfb;
+    --accent-soft: #1e2440;
+    --weekend: #141416;
+  }
+}
