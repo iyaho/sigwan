@@ -157,6 +157,32 @@ body:has(.splitter-y[data-dragging='true']) { cursor: row-resize; }
   margin-left: auto; font-size: var(--fs-xs); color: var(--grade-today);
 }
 
+/* 인라인 모드 — 상세가 리스트 안으로 들어오므로 오른쪽 열이 사라진다 */
+.shell[data-detail='inline'] { grid-template-columns: var(--sidebar-w, 240px) 6px 1fr; }
+
+.task-group { border-bottom: 1px solid var(--border); }
+.task-group > .task { border-bottom: 0; }
+.task-group[data-open='true'] { background: var(--bg-sunken); }
+
+.task-inline {
+  border-top: 1px dashed var(--border-strong);
+  animation: inline-open 140ms ease;
+}
+.task-inline .detail-body-compact { padding: var(--sp-3) var(--sp-4) var(--sp-4) 15px; }
+.task-inline .score-box { background: var(--bg-panel); }
+@keyframes inline-open {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.chev {
+  align-self: center;
+  padding: 0 var(--sp-2);
+  color: var(--text-faint);
+  transition: transform 140ms ease;
+}
+.chev[data-open='true'] { transform: rotate(90deg); }
+
 /* 상세 패널 */
 .detail-close { display: none; }
 .detail-body { padding: var(--sp-4); }

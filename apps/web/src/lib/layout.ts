@@ -10,14 +10,23 @@ import { create } from 'zustand';
 
 const KEY = 'sigwan.layout.v1';
 
+/**
+ * 상세를 어디에 띄우는가 — 어느 쪽이 나은지 정하려고 둘 다 남겨둔 스위치다.
+ *  panel : 오른쪽 열(넓으면 3열 고정, 좁으면 오버레이)
+ *  inline: 리스트에서 그 줄 바로 아래로 펼침 — 오른쪽 열이 사라진다
+ * M1이 끝나고 한쪽을 고르면 나머지 코드는 지운다.
+ */
+export type DetailMode = 'panel' | 'inline';
+
 export interface Layout {
   /** 좌측 사이드바 폭(px) */
   sidebarPx: number;
   /** 아래 할 일 리스트가 가운데 열에서 차지하는 비율(%) — 나머지가 간트 */
   listPct: number;
+  detailMode: DetailMode;
 }
 
-export const LAYOUT_DEFAULT: Layout = { sidebarPx: 240, listPct: 30 };
+export const LAYOUT_DEFAULT: Layout = { sidebarPx: 240, listPct: 30, detailMode: 'panel' };
 
 const LIMIT = {
   sidebarPx: [168, 420],
@@ -27,6 +36,7 @@ const LIMIT = {
 export const clampLayout = (l: Layout): Layout => ({
   sidebarPx: clamp(l.sidebarPx, ...LIMIT.sidebarPx),
   listPct: clamp(l.listPct, ...LIMIT.listPct),
+  detailMode: l.detailMode === 'inline' ? 'inline' : 'panel',
 });
 
 function clamp(v: number, lo: number, hi: number) {
@@ -50,7 +60,8 @@ interface LayoutState extends Layout {
   set: (patch: Partial<Layout>) => void;
   /** 손을 뗄 때 — 여기서만 저장한다 */
   commit: () => void;
-  reset: (key: keyof Layout) => void;
+  toggleDetailMode: () => void;
+  reset: (key: 'sidebarPx' | 'listPct') => void;
 }
 
 export const useLayout = create<LayoutState>((set, get) => ({
@@ -58,11 +69,15 @@ export const useLayout = create<LayoutState>((set, get) => ({
   set: (patch) => set(clampLayout({ ...get(), ...patch })),
   commit: () => {
     try {
-      const { sidebarPx, listPct } = get();
-      localStorage.setItem(KEY, JSON.stringify({ sidebarPx, listPct }));
+      const { sidebarPx, listPct, detailMode } = get();
+      localStorage.setItem(KEY, JSON.stringify({ sidebarPx, listPct, detailMode }));
     } catch {
       /* 저장 못 해도 이번 세션은 그대로 쓴다 */
     }
+  },
+  toggleDetailMode: () => {
+    set({ detailMode: get().detailMode === 'panel' ? 'inline' : 'panel' });
+    get().commit();
   },
   reset: (key) => {
     set({ [key]: LAYOUT_DEFAULT[key] } as Partial<Layout>);

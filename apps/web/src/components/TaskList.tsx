@@ -1,7 +1,9 @@
-import type { Task } from '@sigwan/core';
+import type { Tag, Task } from '@sigwan/core';
 import { GRADE_COLOR, priorityScore, sortByPriority } from '@sigwan/core';
 import { useMemo } from 'react';
+import { useLayout } from '../lib/layout';
 import { useStore } from '../store';
+import { TaskDetail } from './TaskDetail';
 
 function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -10,6 +12,8 @@ function localDate(d = new Date()) {
 export function TaskList() {
   const { tasks, view, selectedTagIds, taskTags, tags, selectedTaskId, select, toggleDone } =
     useStore();
+  const detailMode = useLayout((s) => s.detailMode);
+  const inline = detailMode === 'inline';
 
   const rows = useMemo(() => {
     const now = new Date();
@@ -26,7 +30,8 @@ export function TaskList() {
         break;
       case 'next7':
         list = list.filter(
-          (t) => t.status !== 'done' && !!t.due_at && Date.parse(t.due_at) <= now.getTime() + 7 * 864e5,
+          (t) =>
+            t.status !== 'done' && !!t.due_at && Date.parse(t.due_at) <= now.getTime() + 7 * 864e5,
         );
         break;
       case 'inbox':
@@ -52,16 +57,34 @@ export function TaskList() {
 
   return (
     <div>
-      {rows.map((t) => (
-        <Row
-          key={t.id}
-          task={t}
-          selected={selectedTaskId === t.id}
-          tagNames={(taskTags[t.id] ?? []).map((id) => tagById.get(id)).filter(Boolean)}
-          onSelect={() => select(t.id)}
-          onToggle={() => toggleDone(t.id)}
-        />
-      ))}
+      {rows.map((t) => {
+        const open = selectedTaskId === t.id;
+        return (
+          <div key={t.id} className="task-group" data-open={inline && open}>
+            <Row
+              task={t}
+              selected={open}
+              inline={inline}
+              open={open}
+              tagNames={(taskTags[t.id] ?? []).map((id) => tagById.get(id)).filter(Boolean)}
+              // 인라인에서는 같은 줄을 다시 누르면 접힌다. 패널 모드에선 선택만 옮긴다.
+              onSelect={() => select(inline && open ? null : t.id)}
+              onToggle={() => toggleDone(t.id)}
+            />
+            {inline && open && (
+              // 리스트 칸이 짧을 때 펼치면 내용이 화면 밖에 생긴다. 펼치는 순간 끌어올린다.
+              <div
+                className="task-inline"
+                ref={(el) => {
+                  el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }}
+              >
+                <TaskDetail task={t} compact />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -69,13 +92,17 @@ export function TaskList() {
 function Row({
   task,
   selected,
+  inline,
+  open,
   tagNames,
   onSelect,
   onToggle,
 }: {
   task: Task;
   selected: boolean;
-  tagNames: ({ id: string; name: string; color: string } | undefined)[];
+  inline: boolean;
+  open: boolean;
+  tagNames: (Tag | undefined)[];
   onSelect: () => void;
   onToggle: () => void;
 }) {
@@ -120,6 +147,11 @@ function Row({
           )}
         </div>
       </div>
+      {inline && (
+        <span className="chev" data-open={open} aria-hidden="true">
+          ›
+        </span>
+      )}
     </div>
   );
 }
@@ -131,7 +163,12 @@ function fmtEst(min: number) {
 function fmtDue(iso: string) {
   const d = new Date(iso);
   const diff = (d.getTime() - Date.now()) / 864e5;
-  const s = d.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const s = d.toLocaleString('ko-KR', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
   if (diff < 0) return `${s} 지남`;
   return s;
 }

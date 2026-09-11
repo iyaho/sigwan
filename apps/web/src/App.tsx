@@ -11,7 +11,7 @@ import { useStore } from './store';
 
 export default function App() {
   const { ready, load, setZoom, setOrigin } = useStore();
-  const { sidebarPx, listPct, set, commit, reset } = useLayout();
+  const { sidebarPx, listPct, detailMode, set, commit, reset, toggleDetailMode } = useLayout();
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -50,7 +50,11 @@ export default function App() {
   if (!ready) return <p className="empty">불러오는 중…</p>;
 
   return (
-    <div className="shell" style={{ '--sidebar-w': `${sidebarPx}px` } as React.CSSProperties}>
+    <div
+      className="shell"
+      data-detail={detailMode}
+      style={{ '--sidebar-w': `${sidebarPx}px` } as React.CSSProperties}
+    >
       <Sidebar />
 
       <Splitter
@@ -87,9 +91,17 @@ export default function App() {
             할 일 — 리스트에서 위 타임라인으로 끌어다 놓으면 블록이 생긴다
             <button
               type="button"
-              onClick={() => resetAll().then(() => location.reload())}
+              onClick={toggleDetailMode}
               className="ghost-btn"
               style={{ marginLeft: 'auto' }}
+              title="상세를 오른쪽 패널로 볼지, 리스트에서 펼칠지"
+            >
+              상세: {detailMode === 'panel' ? '오른쪽 패널' : '리스트 펼침'}
+            </button>
+            <button
+              type="button"
+              onClick={() => resetAll().then(() => location.reload())}
+              className="ghost-btn"
             >
               목 데이터 리셋
             </button>
@@ -100,7 +112,7 @@ export default function App() {
         </section>
       </main>
 
-      <DetailPanel />
+      {detailMode === 'panel' && <DetailPanel />}
     </div>
   );
 }
