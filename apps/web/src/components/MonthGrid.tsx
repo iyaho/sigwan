@@ -11,7 +11,7 @@ import { useStore } from '../store';
  *
  * 규칙 셋:
  *  1. 이틀 이상 걸치는 것만 막대. 하루짜리는 칸 안에 '+n'으로 접는다
- *  2. 시작·마감이 같은 것들은 막대 하나로 묶는다 ("발표자료 외 2")
+ *  2. 마감이 같은 것들은 막대 하나로 묶는다 ("발표자료 외 2") — 시작이 달라도. 막대는 가장 이른 시작부터
  *  3. 접힌 것·묶인 것은 누르면 바로 아래 팝업으로 펼친다
  *
  * 시작일이 없으면 오늘~마감 — 점수의 slack이 재는 남은 창. 그래서 같은 마감의
@@ -85,11 +85,13 @@ export function MonthGrid({ monthStart, compact = false }: { monthStart: Date; c
         (sm.get(k) ?? sm.set(k, []).get(k))?.push(t);
         continue;
       }
-      const key = `${ymd(s)}|${ymd(e)}`;
+      // 묶는 기준은 마감 하나. 시작이 달라도 같은 마감이면 한 막대 — 막대는 가장 이른 시작부터
+      const key = ymd(e);
       const g = gm.get(key);
       if (g) {
         g.tasks.push(t);
         g.u = Math.max(g.u, u);
+        if (s.getTime() < g.s.getTime()) g.s = s;
       } else gm.set(key, { key, s, e, tasks: [t], u });
     }
     for (const g of gm.values()) g.tasks.sort((a, b) => priorityScore(b, now).score - priorityScore(a, now).score);
