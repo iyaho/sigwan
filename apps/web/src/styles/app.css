@@ -565,7 +565,7 @@ textarea.txt { resize: vertical; }
 .mgrid-dow { display: grid; grid-template-columns: repeat(7, 1fr); font-size: var(--fs-xs); color: var(--text-faint); padding: 0 0 4px; }
 .mgrid-dow span { padding-left: 6px; }
 .mgrid-dow .weekend { color: var(--grade-now); opacity: 0.7; }
-.mgrid-week { display: grid; grid-template-columns: repeat(7, 1fr); border-top: 1px solid var(--border); }
+.mgrid-week { display: grid; grid-template-columns: repeat(7, 1fr); border-top: 1px solid var(--border); position: relative; }
 .mcell {
   min-height: 96px; padding: 4px 4px 6px; border-right: 1px solid var(--border-soft, var(--border));
   display: flex; flex-direction: column; gap: 3px; min-width: 0;
@@ -583,7 +583,30 @@ textarea.txt { resize: vertical; }
 .mcell.today .mcell-day { background: var(--now-line); color: #fff; }
 .mcell-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .mcell-more { border: 0; background: transparent; font-size: var(--fs-xs); color: var(--accent); text-align: left; padding: 0 6px; cursor: pointer; }
-.mcell-blocks { font-size: var(--fs-xs); color: var(--text-faint); padding: 0 6px; }
+.mcell-blocks { font-size: var(--fs-xs); color: var(--text-faint); padding: 0 6px; display: block; }
+
+/* 달력 위 기간 막대 */
+.mbar {
+  position: absolute;
+  border: 1px solid;
+  border-radius: 3px;
+  padding: 0 6px;
+  font-size: var(--fs-xs);
+  line-height: 16px;
+  text-align: left;
+  color: var(--text);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  z-index: 2;
+}
+/* 이어지는 쪽 끝은 각지게 — 다음/이전 주로 계속된다는 표시 */
+.mbar:not(.s) { border-left-style: dashed; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.mbar:not(.e) { border-right-style: dashed; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.mbar:hover { filter: brightness(0.96); z-index: 3; }
+.mbar-cont { color: var(--text-faint); }
+.mgrid.compact .mbar { padding: 0; border-radius: 2px; }
 
 /* 분기 — 미니 달력 3장 */
 .qgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); }
@@ -592,8 +615,16 @@ textarea.txt { resize: vertical; }
 .mgrid-title { font-weight: 600; font-size: var(--fs-md); margin-bottom: 6px; }
 .mgrid.compact .mcell { min-height: 40px; align-items: center; padding: 3px 2px 5px; gap: 2px; }
 .mgrid.compact .mcell-day { width: 22px; height: 22px; font-size: var(--fs-xs); align-self: center; }
+.mgrid.compact .mcell.today .mcell-day { background: var(--now-line); color: #fff; }
 .mdots {
   min-width: 8px; height: 8px; border-radius: 999px; font-size: 9px; color: #fff; line-height: 8px;
   padding: 0 2px; text-align: center; font-weight: 600;
 }
 .head-hint { margin-left: auto; font-size: var(--fs-xs); color: var(--text-faint); white-space: nowrap; }
+
+.mbar-more {
+  position: absolute; right: 6px; border: 0; background: transparent;
+  font-size: var(--fs-xs); color: var(--accent); cursor: pointer; padding: 0 4px; z-index: 2; line-height: 16px;
+}
+.mbar-more:hover { text-decoration: underline; }
+.mgrid.compact .mbar-more { font-size: 9px; line-height: 10px; }
