@@ -45,7 +45,11 @@ interface Pop {
   tasks: Task[];
   x: number;
   y: number;
+  /** 아래 공간이 모자라면 위로 연다 */
+  up: boolean;
 }
+const POP_W = 340;
+const POP_MAX_H = 320;
 
 export function MonthGrid({ monthStart, compact = false }: { monthStart: Date; compact?: boolean }) {
   const { tasks, blocks, revealTask, scheduleTask, setOrigin, setZoom } = useStore();
@@ -141,7 +145,11 @@ export function MonthGrid({ monthStart, compact = false }: { monthStart: Date; c
   };
   const openPop = (e: React.MouseEvent, title: string, list: Task[]) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setPop({ title, tasks: list, x: r.left, y: r.bottom + 4 });
+    // 오른쪽 끝 칸에서 열면 화면 밖으로 나가 잘린다 — 앵커의 오른쪽 끝에 맞춰 왼쪽으로 연다
+    let x = r.left;
+    if (x + POP_W > window.innerWidth - 8) x = Math.max(8, r.right - POP_W);
+    const up = r.bottom + 4 + POP_MAX_H > window.innerHeight && r.top > POP_MAX_H;
+    setPop({ title, tasks: list, x, y: up ? r.top - 4 : r.bottom + 4, up });
   };
 
   return (
@@ -261,7 +269,10 @@ export function MonthGrid({ monthStart, compact = false }: { monthStart: Date; c
       })}
 
       {pop && (
-        <div className="mpop" style={{ left: pop.x, top: pop.y }}>
+        <div
+          className="mpop"
+          style={{ left: pop.x, top: pop.y, width: POP_W, transform: pop.up ? 'translateY(-100%)' : undefined }}
+        >
           <div className="mpop-head">
             {pop.title} · {pop.tasks.length}
           </div>

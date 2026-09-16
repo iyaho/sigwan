@@ -641,7 +641,7 @@ textarea.txt { resize: vertical; }
 .mbar.grouped { font-weight: 600; }
 
 .mpop {
-  position: fixed; z-index: 50; min-width: 240px; max-width: 360px;
+  position: fixed; z-index: 50; max-width: calc(100vw - 16px);
   background: var(--bg-panel); border: 1px solid var(--border-strong); border-radius: var(--r-md);
   box-shadow: 0 10px 30px rgb(0 0 0 / 0.22); padding: 6px 0;
 }
