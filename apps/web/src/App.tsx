@@ -13,7 +13,17 @@ import { useStore } from './store';
 export default function App() {
   const { ready, load, setZoom, setOrigin, search, setSearch, select } = useStore();
   const searchRef = useRef<HTMLInputElement>(null);
-  const { sidebarPx, listPct, detailMode, set, commit, reset, toggleDetailMode } = useLayout();
+  const {
+    sidebarPx,
+    listPct,
+    detailMode,
+    sidebarCollapsed,
+    set,
+    commit,
+    reset,
+    toggleDetailMode,
+    toggleSidebar,
+  } = useLayout();
   const mainRef = useRef<HTMLElement>(null);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -32,6 +42,10 @@ export default function App() {
         e.preventDefault();
         setAddOpen(true);
       }
+      if (e.key === '[') {
+        e.preventDefault();
+        toggleSidebar();
+      }
       if (e.key === '/') {
         e.preventDefault();
         searchRef.current?.focus();
@@ -47,7 +61,7 @@ export default function App() {
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
-  }, [setZoom, setOrigin, select]);
+  }, [setZoom, setOrigin, select, toggleSidebar]);
 
   // 세로 선: 포인터의 clientX가 곧 사이드바 폭이다 (사이드바가 화면 왼쪽 끝에 붙어 있으므로)
   const moveSidebar = useCallback((clientX: number) => set({ sidebarPx: clientX }), [set]);
@@ -68,11 +82,15 @@ export default function App() {
     <div
       className="shell"
       data-detail={detailMode}
-      style={{ '--sidebar-w': `${sidebarPx}px` } as React.CSSProperties}
+      data-sidebar={sidebarCollapsed ? 'collapsed' : 'open'}
+      style={{ '--sidebar-w': `${sidebarCollapsed ? 44 : sidebarPx}px` } as React.CSSProperties}
     >
       <Sidebar />
 
-      <Splitter
+      {sidebarCollapsed ? (
+        <div className="splitter splitter-x" aria-hidden="true" />
+      ) : (
+        <Splitter
         axis="x"
         label="사이드바 너비"
         onMove={moveSidebar}
@@ -83,6 +101,7 @@ export default function App() {
         }}
         onReset={() => reset('sidebarPx')}
       />
+      )}
 
       <main className="col" ref={mainRef}>
         <section className="col pane-grow">

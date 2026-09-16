@@ -24,9 +24,16 @@ export interface Layout {
   /** 아래 할 일 리스트가 가운데 열에서 차지하는 비율(%) — 나머지가 간트 */
   listPct: number;
   detailMode: DetailMode;
+  /** 사이드바 접힘 — 접으면 44px 레일만 남는다 */
+  sidebarCollapsed: boolean;
 }
 
-export const LAYOUT_DEFAULT: Layout = { sidebarPx: 240, listPct: 30, detailMode: 'panel' };
+export const LAYOUT_DEFAULT: Layout = {
+  sidebarPx: 240,
+  listPct: 30,
+  detailMode: 'panel',
+  sidebarCollapsed: false,
+};
 
 const LIMIT = {
   sidebarPx: [168, 420],
@@ -37,6 +44,7 @@ export const clampLayout = (l: Layout): Layout => ({
   sidebarPx: clamp(l.sidebarPx, ...LIMIT.sidebarPx),
   listPct: clamp(l.listPct, ...LIMIT.listPct),
   detailMode: l.detailMode === 'inline' ? 'inline' : 'panel',
+  sidebarCollapsed: l.sidebarCollapsed === true,
 });
 
 function clamp(v: number, lo: number, hi: number) {
@@ -61,6 +69,7 @@ interface LayoutState extends Layout {
   /** 손을 뗄 때 — 여기서만 저장한다 */
   commit: () => void;
   toggleDetailMode: () => void;
+  toggleSidebar: () => void;
   reset: (key: 'sidebarPx' | 'listPct') => void;
 }
 
@@ -69,11 +78,18 @@ export const useLayout = create<LayoutState>((set, get) => ({
   set: (patch) => set(clampLayout({ ...get(), ...patch })),
   commit: () => {
     try {
-      const { sidebarPx, listPct, detailMode } = get();
-      localStorage.setItem(KEY, JSON.stringify({ sidebarPx, listPct, detailMode }));
+      const { sidebarPx, listPct, detailMode, sidebarCollapsed } = get();
+      localStorage.setItem(
+        KEY,
+        JSON.stringify({ sidebarPx, listPct, detailMode, sidebarCollapsed }),
+      );
     } catch {
       /* 저장 못 해도 이번 세션은 그대로 쓴다 */
     }
+  },
+  toggleSidebar: () => {
+    set({ sidebarCollapsed: !get().sidebarCollapsed });
+    get().commit();
   },
   toggleDetailMode: () => {
     set({ detailMode: get().detailMode === 'panel' ? 'inline' : 'panel' });

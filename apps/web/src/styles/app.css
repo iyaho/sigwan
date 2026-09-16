@@ -500,3 +500,12 @@ textarea.txt { resize: vertical; }
   box-shadow: 0 0 0 2px var(--bg);
 }
 .milestone:hover { transform: rotate(45deg) scale(1.25); }
+
+/* ── 사이드바 접기 ──────────────────────────────────────────────────── */
+.sidebar.rail { align-items: center; padding-block: var(--sp-2); gap: 2px; }
+.rail-btn { width: 30px; height: 30px; padding: 0; font-size: var(--fs-md); display: grid; place-items: center; }
+.rail-views { list-style: none; margin: var(--sp-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.rail-views .icon-btn[aria-current='true'] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.rail-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--accent); margin-top: var(--sp-3); }
+.shell[data-sidebar='collapsed'] .splitter-x { pointer-events: none; }
+.shell[data-sidebar='collapsed'] .splitter-x::before { background: var(--border); }

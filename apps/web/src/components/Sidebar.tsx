@@ -1,5 +1,6 @@
 import type * as React from 'react';
 import { useMemo, useState } from 'react';
+import { useLayout } from '../lib/layout';
 import { useStore } from '../store';
 import type { ViewKey } from '../lib/views';
 
@@ -28,6 +29,8 @@ export function Sidebar() {
   const { view, setView, tags, selectedTagIds, toggleTag, tasks, taskTags } = useStore();
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const collapsed = useLayout((l) => l.sidebarCollapsed);
+  const toggleSidebar = useLayout((l) => l.toggleSidebar);
 
   const counts = useMemo(() => {
     const live = tasks.filter((t) => !t.deleted_at);
@@ -45,11 +48,54 @@ export function Sidebar() {
     return m;
   }, [taskTags]);
 
+  if (collapsed) {
+    // 44px 레일. 뷰 이름 첫 글자만 — 넓힐 때까지 필터가 뭔지 잊지 않게
+    return (
+      <aside className="col sidebar rail">
+        <button
+          type="button"
+          className="icon-btn rail-btn"
+          title="사이드바 펼치기  ["
+          onClick={toggleSidebar}
+        >
+          ›
+        </button>
+        <ul className="rail-views">
+          {VIEWS.map(([k, label]) => (
+            <li key={k}>
+              <button
+                type="button"
+                className="icon-btn rail-btn"
+                aria-current={view === k}
+                title={label}
+                onClick={() => setView(k)}
+              >
+                {label.slice(0, 1)}
+              </button>
+            </li>
+          ))}
+        </ul>
+        {selectedTagIds.length > 0 && (
+          <span className="rail-dot" title={`태그 필터 ${selectedTagIds.length}개 켜짐`} />
+        )}
+      </aside>
+    );
+  }
+
   return (
     <aside className="col sidebar">
       <div className="pane-head">
         <span className="brand">시관</span>
         <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>M1 · 로컬 저장</span>
+        <button
+          type="button"
+          className="icon-btn"
+          style={{ marginLeft: 'auto' }}
+          title="사이드바 접기  ["
+          onClick={toggleSidebar}
+        >
+          ‹
+        </button>
       </div>
       <div className="pane-body">
         <ul className="navlist">
