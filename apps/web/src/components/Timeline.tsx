@@ -1,7 +1,5 @@
-import { ZOOMS } from '@sigwan/core';
+import { rangeProgress, shiftOrigin, startOfDay, viewRange, ZOOMS } from '@sigwan/core';
 import { useMemo } from 'react';
-import { shiftOrigin, startOfDay, viewRange } from '../lib/calendar';
-import { rangeProgress } from '../lib/views';
 import { useStore } from '../store';
 import { DayColumns } from './DayColumns';
 import { MonthGrid } from './MonthGrid';

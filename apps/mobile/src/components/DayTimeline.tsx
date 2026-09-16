@@ -32,7 +32,7 @@ const DRAG_THRESHOLD = 4;
 
 export const TIMELINE_HEIGHT = AXIS_H;
 
-export function DayTimeline({ day }: { day: Date }) {
+export function DayTimeline({ day, onPickSlot }: { day: Date; onPickSlot?: (at: Date) => void }) {
   const th = useTheme();
   const { blocks, tasks } = useStore();
   const dayStart = useMemo(() => {
@@ -55,10 +55,24 @@ export function DayTimeline({ day }: { day: Date }) {
 
   return (
     <View style={{ height: AXIS_H }}>
-      <View style={[styles.gutter, { backgroundColor: th.panel, borderRightColor: th.border }]} />
+      {/* 빈 곳을 길게 누르면 그 시각에 할 일을 잡는다 (3.2의 모바일판).
+          블록보다 먼저 그려서 블록 탭/드래그가 위에 온다 */}
+      {onPickSlot && (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          delayLongPress={300}
+          onLongPress={(e) => {
+            const min = Math.round(e.nativeEvent.locationY / PPM / V.snapMinutes) * V.snapMinutes;
+            onPickSlot(new Date(dayStart.getTime() + min * 60_000));
+          }}
+        />
+      )}
+
+      <View pointerEvents="none" style={[styles.gutter, { backgroundColor: th.panel, borderRightColor: th.border }]} />
 
       {tickList.map((t) => (
         <View
+          pointerEvents="none"
           key={t.t.getTime()}
           style={[
             styles.tick,

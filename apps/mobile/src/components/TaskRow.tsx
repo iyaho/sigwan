@@ -77,8 +77,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 15, lineHeight: 20 },
   done: { textDecorationLine: 'line-through' },
   meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 3, alignItems: 'center' },
-  metaText: { fontSize: 12 },
+  metaText: { fontSize: 12, lineHeight: 17 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 1, borderRadius: 999 },
   dot: { width: 6, height: 6, borderRadius: 999 },
-  chipText: { fontSize: 11 },
+  chipText: { fontSize: 11, lineHeight: 16 },
 });

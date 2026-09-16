@@ -1,20 +1,7 @@
 import type * as React from 'react';
 import type { Block, Task } from '@sigwan/core';
-import {
-  GRADE_COLOR,
-  MIN_DRAGGABLE_PX,
-  ZOOMS,
-  isOutOfRange,
-  isWeekend,
-  layoutBlocks,
-  priorityScore,
-  pxToTime,
-  snap,
-  ticks,
-  timeToPx,
-} from '@sigwan/core';
+import { addDays, DAY_MS, GRADE_COLOR, isOutOfRange, isWeekend, layoutBlocks, MIN_DRAGGABLE_PX, priorityScore, pxToTime, sameDay, snap, ticks, timeToPx, WEEKDAY_KO, ymd, ZOOMS } from '@sigwan/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DAY_MS, WEEKDAY_KO, addDays, sameDay, ymd } from '../lib/calendar';
 import { urgencyColor } from '../lib/urgency';
 import { useStore } from '../store';
 

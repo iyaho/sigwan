@@ -10,7 +10,8 @@ import { useLayout } from './lib/layout';
 import { useStore } from './store';
 
 export default function App() {
-  const { ready, load, setZoom, setOrigin, search, setSearch, select } = useStore();
+  const { ready, load, setZoom, setOrigin, search, setSearch, select, notice, setNotice } =
+    useStore();
   const searchRef = useRef<HTMLInputElement>(null);
   const {
     sidebarPx,
@@ -29,6 +30,13 @@ export default function App() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 알림은 3초 뒤 스스로 사라진다
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 3000);
+    return () => clearTimeout(t);
+  }, [notice, setNotice]);
 
   // 12장 단축키: 1–4 줌 / T 오늘
   useEffect(() => {
@@ -166,6 +174,11 @@ export default function App() {
 
       {detailMode === 'panel' && <DetailPanel />}
       <AddTask open={addOpen} onClose={() => setAddOpen(false)} />
+      {notice && (
+        <output className="toast" aria-live="polite">
+          {notice}
+        </output>
+      )}
     </div>
   );
 }

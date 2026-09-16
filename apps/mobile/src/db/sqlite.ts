@@ -188,3 +188,15 @@ export async function resetAll() {
   );
   await seedIfEmpty(db);
 }
+
+/** 앱 설정 몇 개 — 온보딩 봤는지 같은 것. 동기화 대상이 아니라 meta에 둔다 */
+export async function getMeta(key: string): Promise<string | null> {
+  const db = await getDb();
+  const r = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', key);
+  return r?.value ?? null;
+}
+
+export async function setMeta(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  await serial(() => db.runAsync('INSERT OR REPLACE INTO meta (key,value) VALUES (?,?)', key, value));
+}

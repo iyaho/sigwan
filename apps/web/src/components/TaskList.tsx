@@ -1,8 +1,7 @@
 import type { Tag, Task } from '@sigwan/core';
-import { GRADE_COLOR, priorityScore, sortByPriority } from '@sigwan/core';
+import { filterByView, GRADE_COLOR, priorityScore, sortByPriority } from '@sigwan/core';
 import { useMemo } from 'react';
 import { useLayout } from '../lib/layout';
-import { filterByView } from '../lib/views';
 import { useStore } from '../store';
 import { TaskDetail } from './TaskDetail';
 

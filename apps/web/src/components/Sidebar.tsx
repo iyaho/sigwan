@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { resetAll } from '../lib/db';
 import { useLayout } from '../lib/layout';
 import { useStore } from '../store';
-import { type ViewKey, viewProgress } from '../lib/views';
+import { type ViewKey, viewProgress } from '@sigwan/core';
 
 const VIEWS: [ViewKey, string][] = [
   ['today', '오늘'],

@@ -1,14 +1,16 @@
-import { sortByPriority } from '@sigwan/core';
+import { filterByView, sortByPriority, viewProgress } from '@sigwan/core';
+import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddTaskSheet } from '@/components/AddTaskSheet';
 import { Fab } from '@/components/Fab';
 import { TaskDetailSheet } from '@/components/TaskDetailSheet';
+import { Onboarding } from '@/components/Onboarding';
 import { TaskRow } from '@/components/TaskRow';
+import { UpNext } from '@/components/UpNext';
 import { useStore } from '@/store';
 import { sp, useTheme } from '@/theme';
-import { todayProgress, todayTasks } from '@/views';
 
 /**
  * 오늘 탭 — 기본 화면 (12장). M3 1차: 급한 순 리스트 + 진행도.
@@ -19,9 +21,11 @@ export default function TodayScreen() {
   const insets = useSafeAreaInsets();
   const { tasks, tags, taskTags, toggleDone, select } = useStore();
   const [addOpen, setAddOpen] = useState(false);
+  const router = useRouter();
 
-  const rows = useMemo(() => sortByPriority(todayTasks(tasks)), [tasks]);
-  const prog = useMemo(() => todayProgress(tasks), [tasks]);
+  const rows = useMemo(() => sortByPriority(filterByView(tasks, 'today')), [tasks]);
+  // viewProgress는 인박스·완료함에서 null을 준다. '오늘'은 항상 값이 있지만 타입상 좁혀둔다.
+  const prog = useMemo(() => viewProgress(tasks, 'today') ?? { done: 0, total: 0 }, [tasks]);
   const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);
 
@@ -47,6 +51,11 @@ export default function TodayScreen() {
       </View>
 
       <FlatList
+        ListHeaderComponent={
+          <View style={{ paddingVertical: 10 }}>
+            <UpNext onOpenTimeline={() => router.push('/timeline')} />
+          </View>
+        }
         data={rows}
         keyExtractor={(t) => t.id}
         renderItem={({ item }) => (
@@ -66,6 +75,7 @@ export default function TodayScreen() {
       <Fab onPress={() => setAddOpen(true)} />
       <AddTaskSheet open={addOpen} onClose={() => setAddOpen(false)} />
       <TaskDetailSheet />
+      <Onboarding onAddTask={() => setAddOpen(true)} />
     </View>
   );
 }

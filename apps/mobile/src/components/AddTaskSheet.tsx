@@ -1,5 +1,14 @@
 import type { Task } from '@sigwan/core';
-import { GRADE_COLOR, GRADE_LABEL, dueFields, priorityScore, sortByPriority } from '@sigwan/core';
+import {
+  EST_INPUT_MAX,
+  EST_INPUT_MIN,
+  GRADE_COLOR,
+  GRADE_LABEL,
+  clampEstimate,
+  dueFields,
+  priorityScore,
+  sortByPriority,
+} from '@sigwan/core';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { DATE_CHIPS, EST_CHIPS, TIME_CHIPS, fmtEst, fmtYmd, shiftYmd } from '../dateChips';
@@ -26,12 +35,27 @@ export function AddTaskSheet({ open, onClose }: { open: boolean; onClose: () => 
   const [dateStr, setDateStr] = useState<string | null>(null);
   const [timeStr, setTimeStr] = useState('');
   const [estMin, setEstMin] = useState(60);
+  const [estDirect, setEstDirect] = useState(false);
+  const [estText, setEstText] = useState('60');
   const [importance, setImportance] = useState(3);
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [more, setMore] = useState(false);
   const [notes, setNotes] = useState('');
   const [scheduleNow, setScheduleNow] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const commitEst = () => {
+    const v = clampEstimate(Number(estText) || estMin);
+    setEstMin(v);
+    setEstText(String(v));
+  };
+  const bumpEst = (d: number) => {
+    setEstMin((m) => {
+      const v = clampEstimate(m + d);
+      setEstText(String(v));
+      return v;
+    });
+  };
 
   const draft = useMemo(
     () => ({
@@ -132,16 +156,58 @@ export function AddTaskSheet({ open, onClose }: { open: boolean; onClose: () => 
         )}
       </Field>
 
-      <Field label="얼마나 걸릴까">
+      {/* 3.3-2는 "칩으로 탭 한 번"이다. 그 근거는 폰에서 #!@ 를 치려면 키보드를 다섯 번
+          바꾸게 된다는 것이었는데, 숫자는 number-pad 하나로 끝나서 그 근거가 안 걸린다.
+          그래서 칩과 ±15분을 그대로 두고 「직접」을 따로 붙인다. 40분·3시간이 필요할 때가 있다. */}
+      <Field label="얼마나 걸릴까" hint={estDirect ? `${EST_INPUT_MIN}~${EST_INPUT_MAX}분` : undefined}>
         <Row>
           {EST_CHIPS.map(([label, v]) => (
-            <Chip key={v} label={label} on={estMin === v} onPress={() => setEstMin(v)} />
+            <Chip
+              key={v}
+              label={label}
+              on={!estDirect && estMin === v}
+              onPress={() => {
+                setEstDirect(false);
+                setEstMin(v);
+              }}
+            />
           ))}
-          <Stepper th={th} label="−15" onPress={() => setEstMin((m) => Math.max(5, m - 15))} />
-          <Stepper th={th} label="+15" onPress={() => setEstMin((m) => m + 15)} />
+          <Stepper th={th} label="−15" onPress={() => bumpEst(-15)} />
+          <Stepper th={th} label="+15" onPress={() => bumpEst(15)} />
+          <Chip
+            label="직접"
+            on={estDirect}
+            onPress={() => {
+              setEstText(String(estMin));
+              setEstDirect((v) => !v);
+            }}
+          />
         </Row>
-        {!EST_CHIPS.some(([, v]) => v === estMin) && (
-          <Text style={{ color: th.textDim, fontSize: 12 }}>{fmtEst(estMin)}</Text>
+
+        {estDirect ? (
+          <Row>
+            <TextInput
+              value={estText}
+              onChangeText={(t) => setEstText(t.replace(/[^0-9]/g, '').slice(0, 4))}
+              onBlur={commitEst}
+              onSubmitEditing={commitEst}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              autoFocus
+              selectTextOnFocus
+              style={[
+                styles.estInput,
+                { borderColor: th.borderStrong, color: th.text, backgroundColor: th.panel },
+              ]}
+            />
+            <Text style={{ color: th.textDim, fontSize: 13, alignSelf: 'center' }}>
+              분 · {fmtEst(clampEstimate(Number(estText) || estMin))}
+            </Text>
+          </Row>
+        ) : (
+          !EST_CHIPS.some(([, v]) => v === estMin) && (
+            <Text style={{ color: th.textDim, fontSize: 12 }}>{fmtEst(estMin)}</Text>
+          )
         )}
       </Field>
 
@@ -267,6 +333,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
   area: { minHeight: 72, textAlignVertical: 'top' },
   step: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 6 },
+  estInput: { width: 84, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, textAlign: 'right' },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: sp[2] },
   box: { width: 20, height: 20, borderWidth: 1.5, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   preview: { flexDirection: 'row', alignItems: 'center', gap: sp[2], padding: sp[3], borderRadius: radius.md },

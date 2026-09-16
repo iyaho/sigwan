@@ -1,7 +1,17 @@
-import type { Block, Tag, Task, ZoomLevel } from '@sigwan/core';
-import { newId, parentUpdate, progressOf } from '@sigwan/core';
+import type { Block, FitResult, Tag, Task, ZoomLevel } from '@sigwan/core';
+import {
+  FIT_LIMIT_LABEL,
+  fitBlock,
+  filterByView,
+  newId,
+  parentUpdate,
+  progressOf,
+  fitSummary,
+  remainingToSchedule,
+  type ViewKey,
+  viewThatShows,
+} from '@sigwan/core';
 import { useLayout } from './lib/layout';
-import { type ViewKey, filterByView, viewThatShows } from './lib/views';
 import { create } from 'zustand';
 import { repos, seedIfEmpty } from './lib/db';
 
@@ -41,7 +51,11 @@ interface State {
   saveBlock: (b: Block) => Promise<void>;
   removeBlock: (id: string) => Promise<void>;
   /** 인박스 Task를 타임라인에 떨어뜨림 → Block 생성 (3.2) */
-  scheduleTask: (taskId: string, startAt: Date) => Promise<void>;
+  /** 짧게 떴다 사라지는 알림. 자동 배치가 예상보다 짧게 잡혔을 때 말해준다 */
+  notice: string | null;
+  setNotice: (m: string | null) => void;
+  /** 자동 배치. 실제로 잡힌 길이를 돌려준다 — 부족분을 화면에서 알려줘야 한다 (fit.ts) */
+  scheduleTask: (taskId: string, startAt: Date) => Promise<FitResult | null>;
 
   /** 태그 CRUD (3.4). 계층 없음 — 필요하면 이름에 슬래시를 쓴다. */
   addTag: (name: string, color: string) => Promise<string | null>;
@@ -81,6 +95,7 @@ export const useStore = create<State>((set, get) => ({
   search: '',
   selectedTagIds: [],
   selectedTaskId: null,
+  notice: null,
   zoom: 'day',
   origin: startOfDay(),
   snapDisabled: false,
@@ -292,20 +307,38 @@ export const useStore = create<State>((set, get) => ({
     set({ selectedTaskId: taskId, selectedTagIds: [], view: viewThatShows(t) });
   },
 
+  setNotice(m) {
+    set({ notice: m });
+  },
+
   async scheduleTask(taskId, startAt) {
     const t = get().tasks.find((x) => x.id === taskId);
-    if (!t) return;
+    if (!t) return null;
+
+    // 블록 길이 = 예상 소요시간이 아니다. "이번에 얼마나 할 것인가"다 (core/fit.ts).
+    // 앱 store와 같은 함수를 쓴다 — 웹에서 잡은 것과 앱에서 잡은 것의 길이가 달라지면 안 된다.
+    const want = remainingToSchedule(t, get().blocks) || Math.max(t.estimate_min, 15);
+    const fit = fitBlock({ start: startAt, wantMinutes: want, existing: get().blocks });
+    if (fit.tooSmall) {
+      set({ notice: `여기는 ${fit.minutes}분뿐이라 잡지 않았다` });
+      return fit;
+    }
+
     await get().saveBlock({
       id: newId(),
       user_id: 'local-user',
       task_id: taskId,
       title: null,
-      start_at: startAt.toISOString(),
-      end_at: new Date(startAt.getTime() + Math.max(t.estimate_min, 15) * 60_000).toISOString(),
+      start_at: fit.start.toISOString(),
+      end_at: fit.end.toISOString(),
       is_all_day: false,
       source: 'drag',
       deleted_at: null,
       rev: 0,
     });
+    if (fit.truncated) {
+      set({ notice: `${fitSummary(fit, want)} (${FIT_LIMIT_LABEL[fit.limitedBy]})` });
+    }
+    return fit;
   },
 }));

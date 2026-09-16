@@ -6,3 +6,7 @@ export * from './id';
 export * from './mock';
 export * from './progress';
 export * from './taskDate';
+export * from './calendar';
+export * from './views';
+export * from './fit';
+export * from './schedule';

@@ -1,16 +1,25 @@
-import { ZOOMS } from '@sigwan/core';
+import { addDays, rangeProgress, startOfDay, startOfWeek, ZOOMS } from '@sigwan/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddTaskSheet } from '@/components/AddTaskSheet';
 import { DayTimeline } from '@/components/DayTimeline';
 import { Fab } from '@/components/Fab';
+import { DayAgenda } from '@/components/DayAgenda';
+import { SlotPickerSheet } from '@/components/SlotPickerSheet';
 import { TaskDetailSheet } from '@/components/TaskDetailSheet';
+import { WeekStrip } from '@/components/WeekStrip';
 import { useStore } from '@/store';
 import { radius, sp, useTheme } from '@/theme';
-import { rangeProgressOf } from '@/views';
 
-/** 타임라인 탭 — 하루 세로 뷰. 주/월은 웹에서 보는 게 낫다(12장: 앱은 일 중심) */
+/**
+ * 타임라인 탭 — 일 / 주 두 모드.
+ *
+ *   일  세로 타임라인. 빈 곳 롱프레스로 시간을 잡는다
+ *   주  7일 스트립 + 고른 날의 리스트. 타임라인이 아니라 "어느 날이 찼나"에 답한다
+ *
+ * 월·분기는 아직 앱에 없다. 주가 실제로 쓰이는지 보고 정한다.
+ */
 export default function TimelineScreen() {
   const th = useTheme();
   const insets = useSafeAreaInsets();
@@ -20,7 +29,9 @@ export default function TimelineScreen() {
     d.setHours(0, 0, 0, 0);
     return d;
   });
+  const [mode, setMode] = useState<'day' | 'week'>('day');
   const [addOpen, setAddOpen] = useState(false);
+  const [slotAt, setSlotAt] = useState<Date | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const [now, setNow] = useState(() => new Date());
 
@@ -45,14 +56,19 @@ export default function TimelineScreen() {
     return blocks.filter((b) => !b.deleted_at && Date.parse(b.end_at) > s && Date.parse(b.start_at) < e);
   }, [blocks, day]);
 
-  const prog = useMemo(() => rangeProgressOf(tasks, day, new Date(day.getTime() + 864e5)), [tasks, day]);
+  const range = useMemo(() => {
+    if (mode === 'week') {
+      const s0 = startOfWeek(day);
+      return { start: s0, end: addDays(s0, 7) };
+    }
+    const s0 = startOfDay(day);
+    return { start: s0, end: addDays(s0, 1) };
+  }, [day, mode]);
+  const prog = useMemo(() => rangeProgress(tasks, range.start, range.end), [tasks, range]);
   const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : null;
 
-  const shift = (n: number) => {
-    const d = new Date(day);
-    d.setDate(d.getDate() + n);
-    setDay(d);
-  };
+  // 주 모드에서는 한 주씩 넘긴다
+  const shift = (n: number) => setDay(addDays(day, mode === 'week' ? n * 7 : n));
 
   const planned = dayBlocks.reduce((m, b) => m + (Date.parse(b.end_at) - Date.parse(b.start_at)) / 60_000, 0);
 
@@ -78,37 +94,64 @@ export default function TimelineScreen() {
           </Pressable>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.h1, { color: th.text }]}>
-            {day.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
+          <Text style={[styles.h1, { color: th.text }]} numberOfLines={1}>
+            {mode === 'week'
+              ? `${range.start.getMonth() + 1}/${range.start.getDate()} – ${addDays(range.start, 6).getMonth() + 1}/${addDays(range.start, 6).getDate()}`
+              : day.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
           </Text>
-          <Text style={{ color: th.textFaint, fontSize: 11, marginTop: 2 }}>
-            블록 {dayBlocks.length}개 · {Math.round((planned / 60) * 10) / 10}시간 잡힘
-            {pct !== null ? ` · 마감 ${pct}%` : ''}
+          <Text style={{ color: th.textFaint, fontSize: 11, lineHeight: 15, marginTop: 2 }} numberOfLines={1}>
+            {mode === 'week'
+              ? `이번 주 마감 ${prog.total}개${pct !== null ? ` · ${pct}% 완료` : ''}`
+              : `블록 ${dayBlocks.length}개 · ${Math.round((planned / 60) * 10) / 10}시간 잡힘${pct !== null ? ` · 마감 ${pct}%` : ''}`}
           </Text>
+        </View>
+
+        <View style={[styles.seg, { borderColor: th.border }]}>
+          {(['day', 'week'] as const).map((m) => (
+            <Pressable
+              key={m}
+              onPress={() => setMode(m)}
+              style={[styles.segBtn, mode === m && { backgroundColor: th.accentSoft }]}
+            >
+              <Text style={{ fontSize: 12, color: mode === m ? th.accent : th.textDim }}>
+                {m === 'day' ? '일' : '주'}
+              </Text>
+            </Pressable>
+          ))}
         </View>
       </View>
 
-      <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}>
-        <View>
-          <DayTimeline day={day} />
-          {isToday && (
-            <View pointerEvents="none" style={[styles.nowLine, { top: nowY, borderTopColor: th.nowLine }]}>
-              <View style={[styles.nowBadge, { backgroundColor: th.nowLine }]}>
-                <Text style={styles.nowText}>
-                  {String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}
-                </Text>
-              </View>
+      {mode === 'week' ? (
+        <>
+          <WeekStrip weekStart={range.start} selected={day} onSelect={setDay} />
+          <DayAgenda day={day} onPickSlot={setSlotAt} />
+        </>
+      ) : (
+        <>
+          <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}>
+            <View>
+              <DayTimeline day={day} onPickSlot={setSlotAt} />
+              {isToday && (
+                <View pointerEvents="none" style={[styles.nowLine, { top: nowY, borderTopColor: th.nowLine }]}>
+                  <View style={[styles.nowBadge, { backgroundColor: th.nowLine }]}>
+                    <Text style={styles.nowText}>
+                      {String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')}
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
-          )}
-        </View>
-      </ScrollView>
+          </ScrollView>
 
-      <Text style={[styles.hint, { color: th.textFaint, bottom: insets.bottom + 8 }]}>
-        길게 눌러 끌면 이동 · 아래끝 손잡이로 길이 조절 · 15분 스냅
-      </Text>
+          <Text style={[styles.hint, { color: th.textFaint, bottom: insets.bottom + 8 }]}>
+            빈 곳을 길게 누르면 그 시각에 할 일을 잡는다 · 블록은 길게 눌러 끌면 이동
+          </Text>
+        </>
+      )}
 
       <Fab onPress={() => setAddOpen(true)} />
       <AddTaskSheet open={addOpen} onClose={() => setAddOpen(false)} />
+      <SlotPickerSheet at={slotAt} onClose={() => setSlotAt(null)} />
       <TaskDetailSheet />
     </View>
   );
@@ -118,6 +161,8 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: sp[3], paddingHorizontal: sp[4], paddingVertical: sp[3], borderBottomWidth: StyleSheet.hairlineWidth },
   nav: { flexDirection: 'row', gap: 4 },
   navBtn: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 6 },
+  seg: { flexDirection: 'row', borderWidth: 1, borderRadius: radius.md, overflow: 'hidden' },
+  segBtn: { paddingHorizontal: 12, paddingVertical: 6 },
   h1: { fontSize: 20, fontWeight: '700', letterSpacing: -0.2 },
   nowLine: { position: 'absolute', left: 0, right: 0, borderTopWidth: 2, zIndex: 20 },
   nowBadge: { position: 'absolute', left: 4, top: -9, paddingHorizontal: 5, paddingVertical: 1, borderRadius: radius.sm },

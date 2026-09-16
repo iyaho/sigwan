@@ -1,4 +1,4 @@
-import type { ZoomLevel } from '@sigwan/core';
+import type { ZoomLevel } from './timeline';
 
 /** 날짜 산술 — 전부 로컬 시간. (7장: day_of와 달력 경계는 로컬 날짜) */
 

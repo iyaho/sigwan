@@ -1,5 +1,5 @@
-import type { Block, Tag, Task } from '@sigwan/core';
-import { newId, parentUpdate, progressOf } from '@sigwan/core';
+import type { Block, FitResult, Tag, Task } from '@sigwan/core';
+import { fitBlock, newId, parentUpdate, progressOf, remainingToSchedule } from '@sigwan/core';
 import { create } from 'zustand';
 import { repos } from './db/repos';
 
@@ -27,7 +27,8 @@ interface State {
   ) => Promise<string>;
   saveBlock: (b: Block) => Promise<void>;
   removeBlock: (id: string) => Promise<void>;
-  scheduleTask: (taskId: string, startAt: Date) => Promise<void>;
+  /** 자동 배치. 실제로 잡힌 길이를 돌려준다 — 부족분을 화면에서 알려줘야 한다 (fit.ts) */
+  scheduleTask: (taskId: string, startAt: Date) => Promise<FitResult | null>;
   setTaskTags: (taskId: string, tagIds: string[]) => Promise<void>;
 }
 
@@ -156,19 +157,27 @@ export const useStore = create<State>((set, get) => ({
 
   async scheduleTask(taskId, startAt) {
     const t = get().tasks.find((x) => x.id === taskId);
-    if (!t) return;
+    if (!t) return null;
+
+    // 블록 길이 = 예상 소요시간이 아니다. "이번에 얼마나 할 것인가"다 (fit.ts).
+    // 20시간짜리를 통째로 넣으려 하면 어떤 규칙을 써도 이상해진다.
+    const want = remainingToSchedule(t, get().blocks) || Math.max(t.estimate_min, 15);
+    const fit = fitBlock({ start: startAt, wantMinutes: want, existing: get().blocks });
+    if (fit.tooSmall) return fit; // 15분도 안 나오는 자리 — 만들지 않는다
+
     await get().saveBlock({
       id: newId(),
       user_id: 'local-user',
       task_id: taskId,
       title: null,
-      start_at: startAt.toISOString(),
-      end_at: new Date(startAt.getTime() + Math.max(t.estimate_min, 15) * 60_000).toISOString(),
+      start_at: fit.start.toISOString(),
+      end_at: fit.end.toISOString(),
       is_all_day: false,
       source: 'drag',
       deleted_at: null,
       rev: 0,
     });
+    return fit;
   },
 
   async setTaskTags(taskId, tagIds) {

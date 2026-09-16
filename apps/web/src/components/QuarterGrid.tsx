@@ -1,5 +1,5 @@
-import { addMonths } from '../lib/calendar';
 import { MonthGrid } from './MonthGrid';
+import { addMonths } from '@sigwan/core';
 
 /** 분기 뷰 — 미니 달력 세 장. 점 = 그 날 마감 (색은 가장 급한 것) */
 export function QuarterGrid({ start }: { start: Date }) {

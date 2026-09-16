@@ -99,7 +99,15 @@ export const Row = ({ children }: { children: ReactNode }) => (
 );
 
 const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)' },
+  // absoluteFillObject는 이 RN 타입에 없다 — 같은 값을 직접 쓴다
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.38)',
+  },
   wrap: { flex: 1, justifyContent: 'flex-end' },
   sheet: { maxHeight: '88%', borderTopLeftRadius: radius.lg + 6, borderTopRightRadius: radius.lg + 6 },
   grip: { width: 36, height: 4, borderRadius: 999, alignSelf: 'center', marginTop: sp[2] },
