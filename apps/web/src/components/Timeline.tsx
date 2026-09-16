@@ -109,8 +109,15 @@ export function Timeline() {
   const tickList = useMemo(() => ticks(origin, axisPx, zoom), [origin, axisPx, zoom]);
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
 
-  const nowOffset = timeToPx(new Date(), origin, zoom);
+  // 현재 시각 선. 렌더 시점에 고정되면 화면을 열어둔 채 30분 지나도 선이 안 움직인다.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const nowOffset = timeToPx(now, origin, zoom);
   const showNow = nowOffset >= 0 && nowOffset <= axisPx;
+  const nowLabel = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -275,7 +282,7 @@ export function Timeline() {
           {tickList.map((t) => (
             <div
               key={t.t.getTime()}
-              className={`tl-tick${t.major ? ' major' : ''}`}
+              className={`tl-tick${t.major ? ' major' : ''}${vertical ? ' v' : ' h'}`}
               style={
                 vertical
                   ? { top: t.offset, background: isWeekend(t.t) ? 'var(--weekend)' : undefined }
@@ -290,7 +297,7 @@ export function Timeline() {
                     }
               }
             >
-              {(t.major || zoom === 'day') && <span>{t.label}</span>}
+              {t.major && <span className="tl-label">{t.label}</span>}
             </div>
           ))}
 
@@ -298,7 +305,9 @@ export function Timeline() {
             <div
               className="tl-now"
               style={vertical ? { top: nowOffset } : { top: 0, bottom: 0, left: GUTTER + nowOffset, right: 'auto', width: 0, height: 'auto', borderTop: 0, borderLeft: '2px solid var(--now-line)' }}
-            />
+            >
+              {vertical && <span className="tl-now-label">{nowLabel}</span>}
+            </div>
           )}
 
           {placed.map(({ item, offset, size, lane }) => {

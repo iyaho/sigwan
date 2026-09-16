@@ -134,11 +134,41 @@ body:has(.splitter-y[data-dragging='true']) { cursor: row-resize; }
 .tl-wrap { position: relative; flex: 1 1 auto; overflow: auto; background: var(--bg); }
 .tl-canvas { position: relative; }
 .tl-gutter { position: absolute; left: 0; top: 0; width: 52px; height: 100%; border-right: 1px solid var(--border); background: var(--bg-panel); z-index: 2; }
-.tl-tick { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); }
+.tl-tick { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border-soft, var(--border)); }
 .tl-tick.major { border-top-color: var(--border-strong); }
-.tl-tick span { position: absolute; left: 6px; top: 2px; font-size: var(--fs-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+/* 일 뷰의 15분 선은 정시보다 옅게 — 안 그러면 전부 같은 굵기라 시간을 못 센다 */
+.tl-tick.v:not(.major) { border-top-style: dashed; opacity: 0.55; }
+
+/* 시각 라벨. 거터(z-index 2) 위에 올려야 보인다 — 원래 그 밑에 깔려서 안 보였다 */
+.tl-label {
+  position: absolute;
+  z-index: 3;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+/* 세로(일) 뷰: 거터 안에서 오른쪽 정렬, 선 위에 세로 중앙 */
+.tl-tick.v .tl-label { left: 0; width: 44px; text-align: right; top: 0; transform: translateY(-50%); }
+/* 가로(주/월/분기) 뷰: 선 오른쪽 위 */
+.tl-tick.h .tl-label { left: 6px; top: 4px; white-space: nowrap; }
+
 .tl-now { position: absolute; left: 52px; right: 0; height: 0; border-top: 2px solid var(--now-line); z-index: 5; pointer-events: none; }
 .tl-now::before { content: ''; position: absolute; left: -4px; top: -4px; width: 7px; height: 7px; border-radius: 999px; background: var(--now-line); }
+.tl-now-label {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 0;
+  transform: translateY(-50%);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: #fff;
+  background: var(--now-line);
+  border-radius: 4px;
+  padding: 0 4px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
 
 .block {
   position: absolute; border-radius: var(--r-md); padding: 3px 7px; overflow: hidden;
