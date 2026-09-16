@@ -1,7 +1,9 @@
 import type { Block, BlockRange, BlockRepo, Repos, Tag, TagRepo, Task, TaskFilter, TaskRepo } from '@sigwan/core';
 import { nowIso } from '@sigwan/core';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { getDb } from './sqlite';
+import { getDb, withWrite } from './sqlite';
+
+/** 쓰기는 전부 withWrite — 직렬 큐에 서고 그 안에서만 트랜잭션을 연다 (sqlite.ts 주석 참조) */
 
 /**
  * core/repo.ts 인터페이스의 SQLite 구현. 웹 Dexie 판(apps/web/src/lib/db.ts)과 1:1.
@@ -75,7 +77,9 @@ function rowToTag(r: Row): Tag {
   };
 }
 
-async function outbox(db: SQLiteDatabase, table: string, rowId: string, op: 'upsert' | 'delete', payload: unknown) {
+type Tx = SQLiteDatabase;
+
+async function outbox(db: Tx, table: string, rowId: string, op: 'upsert' | 'delete', payload: unknown) {
   await db.runAsync(
     'INSERT INTO outbox (table_name,row_id,op,payload,created_at) VALUES (?,?,?,?,?)',
     table, rowId, op, JSON.stringify(payload), nowIso(),
@@ -134,7 +138,7 @@ class SqliteTaskRepo implements TaskRepo {
   async upsert(t: Task): Promise<Task> {
     const db = await getDb();
     const next: Task = { ...t, user_id: USER_ID, updated_at: nowIso(), rev: t.rev + 1 };
-    await db.withTransactionAsync(async () => {
+    await withWrite(async (db) => {
       await db.runAsync(
         `INSERT OR REPLACE INTO tasks (id,user_id,title,notes,kind,status,day_of,start_at,due_at,estimate_min,spent_min,
           importance,progress,pinned,parent_id,rrule,sort_order,score,source,estimate_is_ai,is_locked,enc_blob,
@@ -185,7 +189,7 @@ class SqliteBlockRepo implements BlockRepo {
   async upsert(blk: Block) {
     const db = await getDb();
     const next: Block = { ...blk, user_id: USER_ID, rev: blk.rev + 1 };
-    await db.withTransactionAsync(async () => {
+    await withWrite(async (db) => {
       await db.runAsync(
         'INSERT OR REPLACE INTO blocks (id,user_id,task_id,title,start_at,end_at,is_all_day,source,deleted_at,rev) VALUES (?,?,?,?,?,?,?,?,?,?)',
         next.id, next.user_id, next.task_id, next.title, next.start_at, next.end_at, next.is_all_day ? 1 : 0, next.source, next.deleted_at, next.rev,
@@ -211,7 +215,7 @@ class SqliteTagRepo implements TagRepo {
   async upsert(tag: Tag) {
     const db = await getDb();
     const next: Tag = { ...tag, user_id: USER_ID, rev: tag.rev + 1 };
-    await db.withTransactionAsync(async () => {
+    await withWrite(async (db) => {
       await db.runAsync(
         'INSERT OR REPLACE INTO tags (id,user_id,name,color,sort_order,deleted_at,rev) VALUES (?,?,?,?,?,?,?)',
         next.id, next.user_id, next.name, next.color, next.sort_order, next.deleted_at, next.rev,
@@ -228,7 +232,7 @@ class SqliteTagRepo implements TagRepo {
   }
   async setTaskTags(taskId: string, tagIds: string[]) {
     const db = await getDb();
-    await db.withTransactionAsync(async () => {
+    await withWrite(async (db) => {
       await db.runAsync('DELETE FROM task_tags WHERE task_id = ?', taskId);
       for (const tagId of tagIds) await db.runAsync('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?,?)', taskId, tagId);
       await outbox(db, 'task_tags', taskId, 'upsert', { task_id: taskId, tag_ids: tagIds });

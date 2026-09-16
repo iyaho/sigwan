@@ -2,6 +2,9 @@ import { sortByPriority } from '@sigwan/core';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AddTaskSheet } from '@/components/AddTaskSheet';
+import { Fab } from '@/components/Fab';
+import { TaskDetailSheet } from '@/components/TaskDetailSheet';
 import { TaskRow } from '@/components/TaskRow';
 import { useStore } from '@/store';
 import { sp, useTheme } from '@/theme';
@@ -12,6 +15,7 @@ export default function AllScreen() {
   const insets = useSafeAreaInsets();
   const { tasks, tags, taskTags, toggleDone, select } = useStore();
   const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [addOpen, setAddOpen] = useState(false);
 
   const rows = useMemo(() => {
     let list = tasks.filter((t) => !t.deleted_at && t.status !== 'done' && t.kind !== 'someday');
@@ -52,8 +56,12 @@ export default function AllScreen() {
             onPress={() => select(item.id)}
           />
         )}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
       />
+
+      <Fab onPress={() => setAddOpen(true)} />
+      <AddTaskSheet open={addOpen} onClose={() => setAddOpen(false)} />
+      <TaskDetailSheet />
     </View>
   );
 }

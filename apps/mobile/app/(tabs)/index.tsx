@@ -1,7 +1,10 @@
 import { sortByPriority } from '@sigwan/core';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AddTaskSheet } from '@/components/AddTaskSheet';
+import { Fab } from '@/components/Fab';
+import { TaskDetailSheet } from '@/components/TaskDetailSheet';
 import { TaskRow } from '@/components/TaskRow';
 import { useStore } from '@/store';
 import { sp, useTheme } from '@/theme';
@@ -15,6 +18,7 @@ export default function TodayScreen() {
   const th = useTheme();
   const insets = useSafeAreaInsets();
   const { tasks, tags, taskTags, toggleDone, select } = useStore();
+  const [addOpen, setAddOpen] = useState(false);
 
   const rows = useMemo(() => sortByPriority(todayTasks(tasks)), [tasks]);
   const prog = useMemo(() => todayProgress(tasks), [tasks]);
@@ -56,8 +60,12 @@ export default function TodayScreen() {
         ListEmptyComponent={
           <Text style={[styles.empty, { color: th.textFaint }]}>오늘은 비어 있다.</Text>
         }
-        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
       />
+
+      <Fab onPress={() => setAddOpen(true)} />
+      <AddTaskSheet open={addOpen} onClose={() => setAddOpen(false)} />
+      <TaskDetailSheet />
     </View>
   );
 }

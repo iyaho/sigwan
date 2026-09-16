@@ -16,6 +16,39 @@ import * as SQLite from 'expo-sqlite';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
+/**
+ * 쓰기 직렬 큐.
+ *
+ * expo-sqlite는 연결 하나를 공유한다. 트랜잭션이 겹치면
+ *   withTransactionAsync          → "cannot rollback - no transaction is active"
+ *   withExclusiveTransactionAsync → "database is locked"
+ * 둘 다 같은 병 — 동시 접근이다. 트랜잭션 종류를 바꾸는 대신 쓰기를 한 줄로 세운다.
+ * 읽기는 WAL이라 서로 막지 않으므로 큐에 넣지 않는다.
+ */
+let chain: Promise<unknown> = Promise.resolve();
+
+export function serial<T>(fn: () => Promise<T>): Promise<T> {
+  // 앞 작업이 실패해도 줄은 계속 간다
+  const next = chain.then(fn, fn);
+  chain = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
+
+/** 모든 쓰기는 이걸로. 큐에 서고, 그 안에서만 트랜잭션을 연다. */
+export async function withWrite<T>(fn: (db: SQLite.SQLiteDatabase) => Promise<T>): Promise<T> {
+  const db = await getDb();
+  return serial(async () => {
+    let out!: T;
+    await db.withTransactionAsync(async () => {
+      out = await fn(db);
+    });
+    return out;
+  });
+}
+
 export function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) dbPromise = open();
   return dbPromise;
@@ -110,7 +143,9 @@ async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
   const row = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM tasks');
   if ((row?.n ?? 0) > 0) return;
   const m = makeMockData(new Date());
-  await db.withTransactionAsync(async () => {
+  // open() 안에서 불리므로 withWrite(→getDb)를 쓰면 자기 자신을 기다려 교착된다
+  await serial(() =>
+    db.withTransactionAsync(async () => {
     for (const t of m.tags) {
       await db.runAsync(
         'INSERT INTO tags (id,user_id,name,color,sort_order,deleted_at,rev) VALUES (?,?,?,?,?,?,?)',
@@ -138,13 +173,18 @@ async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
     for (const tt of m.taskTags) {
       await db.runAsync('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?,?)', tt.task_id, tt.tag_id);
     }
-    await db.runAsync("INSERT OR REPLACE INTO meta (key,value) VALUES ('seeded_at', ?)", new Date().toISOString());
-  });
+      await db.runAsync("INSERT OR REPLACE INTO meta (key,value) VALUES ('seeded_at', ?)", new Date().toISOString());
+    }),
+  );
 }
 
 /** 개발용 — 전부 지우고 다시 심는다 */
 export async function resetAll() {
   const db = await getDb();
-  await db.execAsync('DELETE FROM task_tags; DELETE FROM blocks; DELETE FROM tasks; DELETE FROM tags; DELETE FROM outbox; DELETE FROM meta;');
+  await serial(() =>
+    db.execAsync(
+      'DELETE FROM task_tags; DELETE FROM blocks; DELETE FROM tasks; DELETE FROM tags; DELETE FROM outbox; DELETE FROM meta;',
+    ),
+  );
   await seedIfEmpty(db);
 }

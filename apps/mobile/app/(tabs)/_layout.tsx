@@ -1,4 +1,5 @@
-import { Tabs } from 'expo-router';
+// SDK 57에서 'expo-router'의 Tabs는 deprecated — js-tabs가 현재 경로다
+import { Tabs } from 'expo-router/js-tabs';
 import { Text } from 'react-native';
 import { useTheme } from '@/theme';
 
