@@ -515,3 +515,7 @@ textarea.txt { resize: vertical; }
   width: 72px; height: 8px; border-radius: 999px;
   background: linear-gradient(90deg, var(--border-strong), var(--grade-now));
 }
+
+.view-progress { display: inline-flex; align-items: center; gap: 6px; }
+.view-progress .progress-inline { width: 40px; margin: 0; }
+.navlist button[aria-current='true'] .progress { background: color-mix(in oklab, var(--accent) 18%, transparent); }

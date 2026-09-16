@@ -2,7 +2,7 @@ import type * as React from 'react';
 import { useMemo, useState } from 'react';
 import { useLayout } from '../lib/layout';
 import { useStore } from '../store';
-import type { ViewKey } from '../lib/views';
+import { type ViewKey, viewProgress } from '../lib/views';
 
 const VIEWS: [ViewKey, string][] = [
   ['today', '오늘'],
@@ -37,8 +37,18 @@ export function Sidebar() {
     return {
       inbox: live.filter((t) => t.kind === 'someday' && t.status !== 'done').length,
       done: live.filter((t) => t.status === 'done').length,
-      all: live.filter((t) => t.status !== 'done').length,
     };
+  }, [tasks]);
+
+  /** 오늘·다음 7일·전체는 "완료/전체 + 막대". 인박스·완료함은 개수만 */
+  const progress = useMemo(() => {
+    const now = new Date();
+    const m: Partial<Record<ViewKey, { done: number; total: number }>> = {};
+    for (const [k] of VIEWS) {
+      const p = viewProgress(tasks, k, now);
+      if (p) m[k] = p;
+    }
+    return m;
   }, [tasks]);
 
   /** 태그별 사용 건수 — 지우기 전에 얼마나 물려 있는지 보여준다 */
@@ -103,7 +113,25 @@ export function Sidebar() {
             <li key={k}>
               <button type="button" aria-current={view === k} onClick={() => setView(k)}>
                 {label}
-                {k in counts && <span className="count">{counts[k as keyof typeof counts]}</span>}
+                {progress[k] ? (
+                  <span className="view-progress" title={`완료 ${progress[k].done} / 전체 ${progress[k].total}`}>
+                    <span className="progress progress-inline">
+                      <span
+                        className="progress-bar"
+                        style={{
+                          width: progress[k].total
+                            ? `${(progress[k].done / progress[k].total) * 100}%`
+                            : '0%',
+                        }}
+                      />
+                    </span>
+                    <span className="count">
+                      {progress[k].done}/{progress[k].total}
+                    </span>
+                  </span>
+                ) : (
+                  k in counts && <span className="count">{counts[k as keyof typeof counts]}</span>
+                )}
               </button>
             </li>
           ))}

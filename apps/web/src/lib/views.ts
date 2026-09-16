@@ -40,3 +40,38 @@ export function viewThatShows(t: Task): ViewKey {
   if (t.kind === 'someday') return 'inbox';
   return 'all';
 }
+
+/**
+ * 뷰별 진행도 — 사이드바 탭 옆에 "완료/전체".
+ * filterByView는 열린 것만 돌려주므로 여기서는 완료된 것까지 같은 조건으로 센다.
+ * 인박스·완료함은 진행도가 성립하지 않아 null.
+ */
+export function viewProgress(
+  tasks: Task[],
+  view: ViewKey,
+  now = new Date(),
+): { done: number; total: number } | null {
+  const live = tasks.filter((t) => !t.deleted_at);
+  let pool: Task[];
+  switch (view) {
+    case 'today':
+      pool = live.filter(
+        (t) =>
+          t.kind !== 'someday' &&
+          (t.day_of === localDate(now) ||
+            (!!t.due_at && Date.parse(t.due_at) <= now.getTime() + 864e5)),
+      );
+      break;
+    case 'next7':
+      pool = live.filter(
+        (t) => !!t.due_at && Date.parse(t.due_at) <= now.getTime() + 7 * 864e5,
+      );
+      break;
+    case 'all':
+      pool = live.filter((t) => t.kind !== 'someday');
+      break;
+    default:
+      return null;
+  }
+  return { done: pool.filter((t) => t.status === 'done').length, total: pool.length };
+}
