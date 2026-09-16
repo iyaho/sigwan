@@ -519,3 +519,4 @@ textarea.txt { resize: vertical; }
 .view-progress { display: inline-flex; align-items: center; gap: 6px; }
 .view-progress .progress-inline { width: 40px; margin: 0; }
 .navlist button[aria-current='true'] .progress { background: color-mix(in oklab, var(--accent) 18%, transparent); }
+.pct { min-width: 34px; text-align: right; }

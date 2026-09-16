@@ -125,8 +125,10 @@ export function Sidebar() {
                         }}
                       />
                     </span>
-                    <span className="count">
-                      {progress[k].done}/{progress[k].total}
+                    <span className="count pct">
+                      {progress[k].total
+                        ? `${Math.round((progress[k].done / progress[k].total) * 100)}%`
+                        : '—'}
                     </span>
                   </span>
                 ) : (
