@@ -12,22 +12,36 @@ apps/mobile     Expo + React Native (expo-sqlite)
 
 ---
 
-## 1. 처음 한 번만 — 공통
+## 1. 처음 한 번만
+
+**맥**
 
 ```bash
-# Node 24 (.nvmrc에 고정돼 있다)
-nvm install 24 && nvm use
+nvm install 24 && nvm use          # .nvmrc에 24로 고정돼 있다
+npm install -g pnpm@10             # corepack 말고 npm으로 깐다 (이유는 4장)
+```
 
-# pnpm — corepack 말고 npm으로 깐다 (이유는 아래 '막히는 곳' 참조)
+**윈도우** — PowerShell에서. `winget` 뒤에는 **창을 새로 열어야** PATH가 잡힌다.
+
+```powershell
+winget install Git.Git OpenJS.NodeJS
+# 창을 새로 연 뒤
 npm install -g pnpm@10
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # pnpm.ps1 실행 차단 해제
+```
 
+**공통**
+
+```bash
 git clone https://github.com/iyaho/sigwan.git
 cd sigwan
 pnpm install
 pnpm test          # 78개 통과하면 core가 정상이다
 ```
 
-`pnpm test`가 통과하면 그걸로 환경 확인은 끝이다. 웹만 할 사람은 여기서 2번으로, 앱까지 할 사람은 3번을 추가로 깐다.
+`pnpm test`가 통과하면 환경 확인은 끝이다. 웹만 할 사람은 2번으로, 앱까지 할 사람은 3번을 추가로 깐다.
+
+> **윈도우에서 앱까지 할 거면 리포 경로에 한글을 넣지 말 것.** `C:\dev\sigwan` 같은 영문 경로에 두자. Gradle과 NDK가 한글 경로에서 간헐적으로 깨진다. 웹만 할 거면 상관없다.
 
 ---
 
@@ -50,16 +64,12 @@ pnpm dev           # http://localhost:5173
 
 ### 3-1. 도구 설치
 
+**맥**
+
 ```bash
-brew install --cask android-studio     # 느리면 developer.android.com/studio 에서 직접 받아도 된다
-brew install --cask temurin@17
+brew install --cask android-studio temurin@17   # 느리면 developer.android.com/studio 에서 직접 받아도 된다
 npm install -g eas-cli
 ```
-
-**Android Studio를 한 번 열어** 설치 마법사를 끝내고, SDK Manager에서 확인:
-
-- SDK Platform **36** (Android 16) — 명세 13.2가 `targetSdk 36`을 요구한다
-- Build-Tools, Platform-Tools, Emulator
 
 `~/.zshrc`에 추가:
 
@@ -69,10 +79,30 @@ export PATH=$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ```
 
-확인 — 셋 다 나와야 한다:
+**윈도우**
+
+```powershell
+winget install Google.AndroidStudio EclipseAdoptium.Temurin.17.JDK
+npm install -g eas-cli
+
+setx ANDROID_HOME "$env:LOCALAPPDATA\Android\Sdk"
+setx JAVA_HOME "C:\Program Files\Eclipse Adoptium\jdk-17.0.13.11-hotspot"   # 실제 설치된 폴더명으로
+setx PATH "$env:PATH;$env:LOCALAPPDATA\Android\Sdk\platform-tools;$env:LOCALAPPDATA\Android\Sdk\emulator"
+```
+
+`setx`는 **새 창부터** 적용된다. 그리고 `제어판 → Windows 기능 켜기/끄기`에서 **Windows 하이퍼바이저 플랫폼**을 켠다 — 에뮬레이터 가속이 여기 달려 있다.
+
+**공통** — **Android Studio를 한 번 열어** 설치 마법사를 끝내고, SDK Manager에서 확인:
+
+- SDK Platform **36** (Android 16) — 명세 13.2가 `targetSdk 36`을 요구한다
+- Build-Tools, Platform-Tools, Emulator
+
+셋 다 나오면 준비 끝:
 
 ```bash
-adb --version && java -version && eas whoami   # java는 17.x
+adb --version
+java -version      # 17.x 여야 한다
+eas whoami
 ```
 
 ### 3-2. 에뮬레이터 켜기
@@ -119,7 +149,10 @@ npx expo start --dev-client     # Metro만 띄우기
 | 앱이 빨간 화면 `undefined is not a function` | 대개 Metro 캐시. `npx expo start --dev-client --clear` |
 | `ConfigError: /Users/…/package.json does not exist` | `apps/mobile`이 아닌 데서 expo 명령을 쳤다 |
 | SQLite `database is locked` / `cannot rollback` | 쓰기를 `src/db/sqlite.ts`의 `withWrite()` 큐에 태우지 않았다. 연결이 하나라 트랜잭션이 겹치면 터진다 |
-| `.git/index.lock: File exists` | 죽은 git 프로세스의 흔적. `rm -f .git/index.lock` |
+| `.git/index.lock: File exists` | 죽은 git 프로세스의 흔적. `rm -f .git/index.lock` (PowerShell은 `Remove-Item .git\*.lock -Force`) |
+| (윈도우) `pnpm … 스크립트를 실행할 수 없으므로` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
+| (윈도우) 에뮬레이터가 검은 화면에서 멈춘다 | 하이퍼바이저를 다른 프로그램이 점유했다. VMware/VirtualBox 구버전을 끄거나 지운다 |
+| (윈도우) Gradle이 경로에서 이상하게 죽는다 | 리포 경로에 한글이 있는지 본다. `C:\dev\sigwan`로 옮긴다 |
 
 `npx expo-doctor`가 버전 불일치를 이름까지 찍어준다. 앱 쪽이 이상하면 먼저 돌려볼 것.
 
@@ -181,7 +214,7 @@ pnpm install                       # package.json이 바뀌었을 수 있다
 | 증상 | 해결 |
 |---|---|
 | `Permission denied (publickey)` | SSH 주소로 잡혀 있다. `git remote set-url origin https://github.com/iyaho/sigwan.git` |
-| `.git/index.lock: File exists` | 죽은 git 프로세스의 흔적. `rm -f .git/*.lock` |
+| `.git/index.lock: File exists` | `rm -f .git/*.lock` · PowerShell은 `Remove-Item .git\*.lock -Force` |
 | `! [rejected] ... fetch first` | 원격이 앞서 있다. `git pull --rebase` 후 다시 push |
 
 브랜치는 `feat/<모듈번호>-<내용>`, `main`은 PR로만. 긴 브랜치 금지 (명세 16.9).
