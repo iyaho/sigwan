@@ -139,7 +139,7 @@ describe('눈금', () => {
     const odd = new Date('2026-09-02T00:07:00+09:00');
     const t = ticks(odd, 720, 'day');
     expect(t.length).toBeGreaterThan(0);
-    expect(t[0]?.t.getMinutes() % 15).toBe(0);
+    expect((t[0] as (typeof t)[number]).t.getMinutes() % 15).toBe(0);
   });
 
   it('폭을 넘는 눈금은 만들지 않는다', () => {

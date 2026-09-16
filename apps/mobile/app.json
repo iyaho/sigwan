@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "시관",
+    "slug": "sigwan",
+    "scheme": "sigwan",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": { "supportsTablet": false, "bundleIdentifier": "cloud.iyahoweb.sigwan" },
+    "android": {
+      "package": "cloud.iyahoweb.sigwan",
+      "adaptiveIcon": {
+        "backgroundColor": "#3e63dd",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": true,
+      "allowBackup": false
+    },
+    "plugins": ["expo-router", "expo-sqlite"],
+    "experiments": { "typedRoutes": true }
+  }
+}

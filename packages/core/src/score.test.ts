@@ -13,7 +13,6 @@ function task(p: Partial<Task> & { title: string }): Task {
   return {
     id: p.title,
     user_id: 'u1',
-    title: p.title,
     notes: null,
     kind: 'deadline',
     status: 'todo',
