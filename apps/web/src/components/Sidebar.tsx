@@ -1,5 +1,6 @@
 import type * as React from 'react';
 import { useMemo, useState } from 'react';
+import { resetAll } from '../lib/db';
 import { useLayout } from '../lib/layout';
 import { useStore } from '../store';
 import { type ViewKey, viewProgress } from '../lib/views';
@@ -193,6 +194,19 @@ export function Sidebar() {
         </ul>
         {!tags.length && <p className="hint" style={{ padding: '0 16px' }}>태그가 없다. + 로 만든다.</p>}
       </div>
+      {import.meta.env.DEV && (
+        // 개발 빌드에만 있는 버튼. 목 데이터(16.8-4)를 지우고 다시 심는다 — 제품 빌드에서는 컴파일 자체가 빠진다
+        <div className="dev-foot">
+          <button
+            type="button"
+            className="icon-btn"
+            title="개발용 — 목 데이터를 지우고 새로 심는다"
+            onClick={() => resetAll().then(() => location.reload())}
+          >
+            dev · 목 데이터 리셋
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

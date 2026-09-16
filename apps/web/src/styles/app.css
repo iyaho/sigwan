@@ -655,3 +655,6 @@ textarea.txt { resize: vertical; }
 .mpop li i { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
 .mpop-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mpop-meta { font-size: var(--fs-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
+
+.dev-foot { flex: 0 0 auto; border-top: 1px dashed var(--border); padding: 6px 10px; }
+.dev-foot .icon-btn { font-size: var(--fs-xs); color: var(--text-faint); }

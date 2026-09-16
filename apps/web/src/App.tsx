@@ -6,7 +6,6 @@ import { Sidebar } from './components/Sidebar';
 import { Splitter } from './components/Splitter';
 import { TaskList } from './components/TaskList';
 import { Timeline } from './components/Timeline';
-import { resetAll } from './lib/db';
 import { useLayout } from './lib/layout';
 import { useStore } from './store';
 
@@ -157,13 +156,6 @@ export default function App() {
               title="상세를 오른쪽 패널로 볼지, 리스트에서 펼칠지"
             >
               상세: {detailMode === 'panel' ? '오른쪽 패널' : '리스트 펼침'}
-            </button>
-            <button
-              type="button"
-              onClick={() => resetAll().then(() => location.reload())}
-              className="ghost-btn"
-            >
-              목 데이터 리셋
             </button>
           </div>
           <div className="pane-body">
