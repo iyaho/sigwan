@@ -1,5 +1,5 @@
 import type * as React from 'react';
-import type { Block } from '@sigwan/core';
+import type { Block, ZoomLevel } from '@sigwan/core';
 import {
   GRADE_COLOR,
   MIN_DRAGGABLE_PX,
@@ -32,6 +32,9 @@ const GUTTER = 52;
 const LANE_W = 148; // 세로 뷰에서 레인 하나 폭
 const LANE_H = 26; // 가로 뷰에서 레인 하나 높이
 const ROW_GAP = 4;
+const HEAD_H = 40; // 가로 뷰 상단 날짜 헤더
+const GHOST_H = 16; // 기간 막대(고스트) 높이
+const DAY_MS = 864e5;
 
 /** 3px 미만은 드래그가 아니라 클릭이다. 클릭이 데이터를 바꾸면 안 된다. */
 const DRAG_THRESHOLD_PX = 3;
@@ -105,6 +108,70 @@ export function Timeline() {
     () => layoutBlocks(visible, origin, zoom),
     [visible, origin, zoom],
   );
+
+  /**
+   * 3.1 막대 2종 — 계획 막대(Block, 실선) / 기간 막대(start_at~due_at, 고스트).
+   * 가로 뷰에서만 그린다. 일 뷰는 하루라 기간이 화면을 통째로 덮는다.
+   *
+   * start_at이 없는 할 일은 막대가 아니라 마감 자리에 마름모 하나(마일스톤).
+   * created_at부터 그으면 모든 할 일이 화면 왼쪽 끝에서 시작하는 긴 막대가 되어
+   * 레인이 21개까지 늘어났다 — 정보가 없는 걸 있는 것처럼 그리면 안 된다.
+   */
+  const ghosts = useMemo(() => {
+    const empty = { placed: [] as ReturnType<typeof layoutBlocks>['placed'], laneCount: 0 };
+    if (vertical) return empty;
+    const from = origin.getTime();
+    const to = from + spanMinutes * 60_000;
+    const pseudo: Block[] = tasks
+      .filter((t) => !t.deleted_at && t.status !== 'done' && t.due_at)
+      .map((t) => {
+        const end = t.due_at as string;
+        // 마일스톤은 폭 0 대신 스냅 한 칸 — layoutBlocks가 end>start를 요구한다
+        const start = t.start_at ?? new Date(Date.parse(end) - spec.snapMinutes * 60_000).toISOString();
+        return {
+          id: t.id,
+          user_id: t.user_id,
+          task_id: t.id,
+          title: t.title,
+          start_at: start,
+          end_at: end,
+          is_all_day: false,
+          source: 'manual' as const,
+          deleted_at: null,
+          rev: 0,
+        };
+      })
+      .filter((b) => Date.parse(b.end_at) > from && Date.parse(b.start_at) < to);
+    return layoutBlocks(pseudo, origin, zoom);
+  }, [tasks, origin, zoom, vertical, spanMinutes, spec.snapMinutes]);
+
+  const ghostBandH = vertical ? 0 : ghosts.laneCount * (GHOST_H + 2) + (ghosts.laneCount ? 10 : 0);
+  const blocksTop = HEAD_H + ghostBandH;
+
+  /** 가로 뷰의 주말 음영·오늘 열 */
+  const dayColumns = useMemo(() => {
+    if (vertical) return [];
+    const out: { left: number; width: number; weekend: boolean; today: boolean }[] = [];
+    const d0 = new Date(origin);
+    d0.setHours(0, 0, 0, 0);
+    const todayKey = new Date().toDateString();
+    const dayW = 1440 * spec.pxPerMinute;
+    for (let d = new Date(d0); d.getTime() < origin.getTime() + spanMinutes * 60_000; d.setDate(d.getDate() + 1)) {
+      const left = timeToPx(d, origin, zoom);
+      const weekend = isWeekend(d);
+      const today = d.toDateString() === todayKey;
+      if (weekend || today) out.push({ left, width: dayW, weekend, today });
+    }
+    return out;
+  }, [origin, zoom, vertical, spanMinutes, spec.pxPerMinute]);
+
+  /** ◀ ▶ — 줌 단위만큼 이동 */
+  const shift = (dir: 1 | -1) => {
+    const days = zoom === 'day' ? 1 : zoom === 'week' ? 7 : zoom === 'month' ? 30 : 91;
+    const n = new Date(origin);
+    n.setDate(n.getDate() + dir * days);
+    useStore.getState().setOrigin(n);
+  };
 
   const tickList = useMemo(() => ticks(origin, axisPx, zoom), [origin, axisPx, zoom]);
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
@@ -250,19 +317,28 @@ export function Timeline() {
 
   const canvasStyle: React.CSSProperties = vertical
     ? { height: axisPx, paddingLeft: GUTTER, minWidth: GUTTER + laneCount * LANE_W + 20 }
-    : { width: GUTTER + axisPx, height: Math.max(laneCount * (LANE_H + ROW_GAP) + 48, 200) };
+    : { width: GUTTER + axisPx, height: Math.max(blocksTop + laneCount * (LANE_H + ROW_GAP) + 16, 220) };
 
   return (
     <>
       <div className="pane-head">
         <ZoomBar />
-        <button
-          type="button"
-          onClick={() => useStore.getState().setOrigin(startOfDay())}
-          className="ghost-btn"
-        >
-          오늘 (T)
-        </button>
+        <span className="nav">
+          <button type="button" className="ghost-btn" onClick={() => shift(-1)} aria-label="이전">
+            ◀
+          </button>
+          <button
+            type="button"
+            onClick={() => useStore.getState().setOrigin(startOfDay())}
+            className="ghost-btn"
+          >
+            오늘 (T)
+          </button>
+          <button type="button" className="ghost-btn" onClick={() => shift(1)} aria-label="다음">
+            ▶
+          </button>
+        </span>
+        <span className="range-label">{rangeLabel(origin, zoom, spanMinutes)}</span>
         {!vertical && <span className="readonly-note">읽기 전용 — 막대가 {Math.round(120 * spec.pxPerMinute)}px라 드래그 불가</span>}
         {vertical && <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-faint)' }}>Alt = 스냅 해제 · 막대 아래끝 = 길이 조절</span>}
       </div>
@@ -278,6 +354,54 @@ export function Timeline() {
       >
         <div className="tl-canvas" style={canvasStyle}>
           <div className="tl-gutter" />
+
+          {dayColumns.map((c) => (
+            <div
+              key={c.left}
+              className={`tl-daycol${c.weekend ? ' weekend' : ''}${c.today ? ' today' : ''}`}
+              style={{ left: GUTTER + c.left, width: c.width }}
+            />
+          ))}
+
+          {ghosts.placed.map(({ item, offset, size, lane }) => {
+            const task = taskById.get(item.task_id as string);
+            if (!task) return null;
+            const grade = priorityScore(task, now).grade;
+            if (!task.start_at) {
+              // 마일스톤 — 마감 시각에 마름모
+              return (
+                <div
+                  key={`m-${item.id}`}
+                  className="milestone"
+                  style={{
+                    left: GUTTER + offset + size - 6,
+                    top: HEAD_H + 6 + lane * (GHOST_H + 2) + 2,
+                    background: GRADE_COLOR[grade],
+                  }}
+                  title={`${task.title}\n마감 ${fmtDay(item.end_at)}`}
+                  onClick={() => revealTask(task.id)}
+                />
+              );
+            }
+            return (
+              <div
+                key={`g-${item.id}`}
+                className="ghost"
+                style={{
+                  left: GUTTER + offset,
+                  width: Math.max(size, 6),
+                  top: HEAD_H + 6 + lane * (GHOST_H + 2),
+                  height: GHOST_H,
+                  borderColor: GRADE_COLOR[grade],
+                  color: GRADE_COLOR[grade],
+                }}
+                title={`${task.title}\n기간 ${fmtDay(item.start_at)} → ${fmtDay(item.end_at)}`}
+                onClick={() => revealTask(task.id)}
+              >
+                {size > 60 && <span className="ghost-label">{task.title}</span>}
+              </div>
+            );
+          })}
 
           {tickList.map((t) => (
             <div
@@ -328,7 +452,7 @@ export function Timeline() {
               : {};
             const style: React.CSSProperties = vertical
               ? { top: offset, height: Math.max(size, 14), left: GUTTER + 6 + lane * LANE_W, width: LANE_W - 10, background: color, ...eventStyle }
-              : { left: GUTTER + offset, width: Math.max(size, 3), top: 40 + lane * (LANE_H + ROW_GAP), height: LANE_H, background: color, ...eventStyle };
+              : { left: GUTTER + offset, width: Math.max(size, 3), top: blocksTop + lane * (LANE_H + ROW_GAP), height: LANE_H, background: color, ...eventStyle };
             return (
               <div
                 key={item.id}
@@ -374,6 +498,17 @@ function ZoomBar() {
 
 function startOfDay(d = new Date()) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function fmtDay(iso: string) {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function rangeLabel(origin: Date, zoom: ZoomLevel, spanMinutes: number) {
+  const end = new Date(origin.getTime() + spanMinutes * 60_000 - 1);
+  const f = (d: Date) => d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: zoom === 'day' ? 'short' : undefined });
+  return zoom === 'day' ? f(origin) : `${f(origin)} – ${f(end)}`;
 }
 
 function fmt(iso: string) {

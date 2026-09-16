@@ -111,6 +111,29 @@ describe('겹침 레인', () => {
   });
 });
 
+describe('눈금 — 로컬 시간 경계', () => {
+  it('주 뷰의 굵은 눈금은 로컬 자정이다 (UTC 자정 = 09:00 KST 아님)', () => {
+    const t = ticks(ORIGIN, 58 * 3, 'week');
+    const majors = t.filter((x) => x.major);
+    expect(majors.length).toBeGreaterThan(0);
+    for (const m of majors) {
+      expect(m.t.getHours()).toBe(0);
+      expect(m.t.getMinutes()).toBe(0);
+    }
+  });
+
+  it('월 뷰 눈금은 하루 단위로 로컬 자정에 놓인다', () => {
+    const t = ticks(ORIGIN, 28 * 5, 'month');
+    expect(t.every((x) => x.t.getHours() === 0)).toBe(true);
+    expect(t[1]!.t.getDate() - t[0]!.t.getDate()).toBe(1);
+  });
+
+  it('분기 뷰 눈금은 월요일에서 시작한다', () => {
+    const t = ticks(ORIGIN, 9 * 21, 'quarter');
+    expect(t.every((x) => x.t.getDay() === 1)).toBe(true);
+  });
+});
+
 describe('눈금', () => {
   it('격자에 맞춰 생성된다 (origin이 어긋나도)', () => {
     const odd = new Date('2026-09-02T00:07:00+09:00');

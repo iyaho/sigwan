@@ -86,7 +86,7 @@ body:has(.splitter-y[data-dragging='true']) { cursor: row-resize; }
 .detail  { border-left: 1px solid var(--border); background: var(--bg-panel); }
 
 .pane-head {
-  display: flex; align-items: center; gap: var(--sp-2);
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; row-gap: 4px;
   padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--border);
   font-size: var(--fs-sm); color: var(--text-dim); flex: 0 0 auto;
 }
@@ -184,7 +184,7 @@ body:has(.splitter-y[data-dragging='true']) { cursor: row-resize; }
 .zoombar button[aria-pressed='true'] { background: var(--bg-panel); box-shadow: 0 1px 2px rgb(0 0 0 / 0.1); font-weight: 600; }
 
 .readonly-note {
-  margin-left: auto; font-size: var(--fs-xs); color: var(--grade-today);
+  margin-left: auto; font-size: var(--fs-xs); color: var(--grade-today); white-space: nowrap;
 }
 
 /* 인라인 모드 — 상세가 리스트 안으로 들어오므로 오른쪽 열이 사라진다 */
@@ -459,3 +459,44 @@ textarea.txt { resize: vertical; }
 }
 .list-pane[data-hover='true'] .trash-hint { display: inline; }
 .block[data-trash='true'] { opacity: 0.35; outline: 2px dashed var(--grade-now); outline-offset: -2px; }
+
+/* ── 가로 뷰: 주말·오늘 열, 기간 막대, 이동 ─────────────────────────── */
+.tl-daycol { position: absolute; top: 0; bottom: 0; pointer-events: none; }
+.tl-daycol.weekend { background: var(--weekend); }
+.tl-daycol.today { background: color-mix(in oklab, var(--accent) 7%, transparent); }
+.tl-daycol.weekend.today { background: color-mix(in oklab, var(--accent) 9%, var(--weekend)); }
+
+.ghost {
+  position: absolute;
+  border: 1px solid;
+  border-radius: 999px;
+  background: color-mix(in oklab, currentColor 10%, transparent);
+  opacity: 0.85;
+  font-size: 10.5px;
+  line-height: 14px;
+  padding: 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  z-index: 1;
+}
+.ghost:hover { opacity: 1; background: color-mix(in oklab, currentColor 18%, transparent); }
+.ghost-label { color: var(--text-dim); }
+
+.nav { display: inline-flex; gap: 2px; }
+.nav .ghost-btn { padding-inline: 8px; }
+.range-label { font-size: var(--fs-sm); color: var(--text); font-weight: 600; margin-left: 4px; white-space: nowrap; }
+.zoombar button, .nav .ghost-btn, .list-title { white-space: nowrap; }
+
+.milestone {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  border-radius: 2px;
+  cursor: pointer;
+  z-index: 1;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.milestone:hover { transform: rotate(45deg) scale(1.25); }

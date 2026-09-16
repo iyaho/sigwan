@@ -149,20 +149,55 @@ export interface Tick {
   label: string;
 }
 
-/** 눈금 생성. 범위 밖은 만들지 않는다 (분기 뷰에서 수백 개가 된다). */
+/**
+ * 눈금 생성. 범위 밖은 만들지 않는다 (분기 뷰에서 수백 개가 된다).
+ *
+ * 로컬 시간 기준이다. epoch 나머지(ms % DAY)로 자정을 잡으면 UTC 자정 = KST 09:00에
+ * 날짜 눈금이 찍힌다 — 실제로 그렇게 됐었다. 하루 이상 단위는 Date의 로컬 setter로 걷는다.
+ */
 export function ticks(origin: Date, widthPx: number, zoom: ZoomLevel, locale = 'ko-KR'): Tick[] {
   const spec = ZOOMS[zoom];
-  const totalMin = widthPx / spec.pxPerMinute;
+  const endMs = origin.getTime() + (widthPx / spec.pxPerMinute) * 60_000;
   const out: Tick[] = [];
-  const stepMs = spec.tickMinutes * 60_000;
-  // 눈금은 origin이 아니라 눈금 격자에 맞춘다 — 안 그러면 줌할 때 눈금이 미끄러진다
-  const first = Math.ceil(origin.getTime() / stepMs) * stepMs;
-  for (let ms = first; ms < origin.getTime() + totalMin * 60_000; ms += stepMs) {
-    const t = new Date(ms);
-    const major = ms % (spec.majorTickMinutes * 60_000) === 0;
-    out.push({ t, offset: timeToPx(t, origin, zoom), major, label: tickLabel(t, zoom, locale) });
+  const step = spec.tickMinutes;
+
+  // 첫 눈금: origin을 로컬 격자에 내림한 뒤 origin 이상이 될 때까지 한 칸씩 올린다
+  const t = new Date(origin);
+  if (step >= DAY) {
+    t.setHours(0, 0, 0, 0);
+    if (step >= WEEK) t.setDate(t.getDate() - ((t.getDay() + 6) % 7)); // 월요일로
+  } else {
+    t.setSeconds(0, 0);
+    t.setMinutes(Math.floor(t.getMinutes() / step) * step);
+    if (step >= HOUR) t.setMinutes(0);
+    if (step > HOUR) t.setHours(Math.floor(t.getHours() / (step / HOUR)) * (step / HOUR));
+  }
+  const advance = () => {
+    if (step >= WEEK) t.setDate(t.getDate() + 7 * Math.round(step / WEEK));
+    else if (step >= DAY) t.setDate(t.getDate() + Math.round(step / DAY));
+    else t.setMinutes(t.getMinutes() + step);
+  };
+  while (t.getTime() < origin.getTime()) advance();
+
+  for (let guard = 0; t.getTime() < endMs && guard < 5000; guard++) {
+    const major = isMajor(t, spec.majorTickMinutes);
+    out.push({
+      t: new Date(t),
+      offset: timeToPx(t, origin, zoom),
+      major,
+      label: tickLabel(t, zoom, locale),
+    });
+    advance();
   }
   return out;
+}
+
+/** 굵은 눈금 판정 — 로컬 시간의 경계로 */
+function isMajor(t: Date, majorMinutes: number): boolean {
+  if (majorMinutes >= 4 * WEEK) return t.getDate() === 1 && t.getHours() === 0; // 월초
+  if (majorMinutes >= WEEK) return t.getDay() === 1 && t.getHours() === 0; // 월요일
+  if (majorMinutes >= DAY) return t.getHours() === 0 && t.getMinutes() === 0; // 자정
+  return t.getMinutes() === 0; // 정시
 }
 
 function tickLabel(t: Date, zoom: ZoomLevel, locale: string): string {
