@@ -1,6 +1,6 @@
 import type * as React from 'react';
 import type { Block, Task } from '@sigwan/core';
-import { addDays, DAY_MS, GRADE_COLOR, isOutOfRange, isWeekend, layoutBlocks, MIN_DRAGGABLE_PX, priorityScore, pxToTime, sameDay, snap, ticks, timeToPx, WEEKDAY_KO, ymd, ZOOMS } from '@sigwan/core';
+import { addDays, checkKey, DAY_MS, GRADE_COLOR, isOutOfRange, isWeekend, layoutBlocks, MIN_DRAGGABLE_PX, priorityScore, pxToTime, routineOccurrences, sameDay, sleepSpans, snap, ticks, timeToPx, WEEKDAY_KO, ymd, ZOOMS } from '@sigwan/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { urgencyColor } from '../lib/urgency';
 import { useStore } from '../store';
@@ -36,8 +36,22 @@ interface DragState {
 }
 
 export function DayColumns({ start, days }: { start: Date; days: number }) {
-  const { blocks, tasks, snapDisabled, saveBlock, removeBlock, scheduleTask, revealTask } =
-    useStore();
+  const {
+    blocks,
+    tasks,
+    routines,
+    routineChecks,
+    settings,
+    snapDisabled,
+    saveBlock,
+    removeBlock,
+    scheduleTask,
+    revealTask,
+    toggleRoutineCheck,
+    proposals,
+    editProposal,
+    dropProposal,
+  } = useStore();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const moved = useRef(false);
@@ -69,17 +83,39 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
 
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
 
+  /**
+   * 제안을 Block 모양으로 감싼다. id에 'p:'를 붙여 구분하고, 저장하는 지점에서만 갈라낸다.
+   * 이렇게 해야 레인 계산·드래그·길이 조절·휴지통 드롭이 전부 공짜로 따라온다.
+   */
+  const proposalBlocks = useMemo<Block[]>(
+    () =>
+      proposals.map((p) => ({
+        id: `p:${p.key}`,
+        user_id: 'local-user',
+        task_id: p.taskId,
+        title: p.title,
+        start_at: p.start,
+        end_at: p.end,
+        is_all_day: false,
+        source: 'drag',
+        deleted_at: null,
+        rev: 0,
+      })),
+    [proposals],
+  );
+  const allBlocks = useMemo(() => [...blocks, ...proposalBlocks], [blocks, proposalBlocks]);
+
   /** 열마다 레인 배치 — 하루 안에서만 겹침을 푼다 */
   const columns = useMemo(
     () =>
       dayStarts.map((d0) => {
         const d1 = addDays(d0, 1);
-        const vis = blocks.filter(
+        const vis = allBlocks.filter(
           (b) => !b.deleted_at && Date.parse(b.end_at) > d0.getTime() && Date.parse(b.start_at) < d1.getTime(),
         );
         return layoutBlocks(vis, d0, 'day');
       }),
-    [blocks, dayStarts],
+    [allBlocks, dayStarts],
   );
 
   /** 그 날 마감인 할 일 (열린 것만) — 상단 칩 */
@@ -98,6 +134,38 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
     Math.max(0, ...dayStarts.map((d) => (dueByDay.get(ymd(d))?.length ?? 0))) * 20 + 8,
   );
   const topH = HEAD_H + dueRowH;
+
+  /**
+   * 막혀 있는 시간 — 수면과 고정 일정. 배경으로 깐다.
+   * layoutBlocks에 넣으면 8시간짜리 수면이 레인을 하나 먹어서 진짜 블록이 절반 폭이 된다.
+   */
+  const busyByDay = useMemo(() => {
+    const end = addDays(start, days);
+    const occ = routineOccurrences(routines, start, end);
+    const sleeps = sleepSpans(settings.sleep, start, end);
+    return dayStarts.map((d0) => {
+      const d1 = addDays(d0, 1);
+      const within = (s: Date, e: Date) => e.getTime() > d0.getTime() && s.getTime() < d1.getTime();
+      return {
+        sleeps: sleeps
+          .filter((b) => within(new Date(b.start_at), new Date(b.end_at)))
+          .map((b) => ({
+            id: b.id,
+            top: Math.max(0, timeToPx(new Date(b.start_at), d0, 'day')),
+            bottom: Math.min(AXIS_PX, timeToPx(new Date(b.end_at), d0, 'day')),
+          }))
+          .filter((x) => x.bottom > x.top),
+        routines: occ
+          .filter((o) => within(o.start, o.end))
+          .map((o) => ({
+            o,
+            top: Math.max(0, timeToPx(o.start, d0, 'day')),
+            bottom: Math.min(AXIS_PX, timeToPx(o.end, d0, 'day')),
+          }))
+          .filter((x) => x.bottom > x.top),
+      };
+    });
+  }, [routines, settings.sleep, dayStarts, start, days]);
 
   const tickList = useMemo(() => ticks(start, AXIS_PX, 'day'), [start]);
 
@@ -183,7 +251,7 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
     if (!drag) return;
     const el = elRef.current[drag.id];
     const { minutes, dayShift } = deltaOf(e, drag);
-    const b = blocks.find((x) => x.id === drag.id);
+    const b = allBlocks.find((x) => x.id === drag.id);
     const wasMoved = moved.current;
     const dropOnTrash = drag.mode === 'move' && wasMoved && !!overTrash(e);
     setDrag(null);
@@ -196,6 +264,26 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
       el.style.height = drag.origStyle.height;
     }
     if (!b || !wasMoved) return; // 클릭은 선택만. 저장하면 스냅으로 시각이 조용히 움직인다
+
+    // 제안은 아직 DB에 없다. 여기서 저장하면 「적용」 버튼의 의미가 사라진다.
+    if (isProposal(b.id)) {
+      const key = b.id.slice(2);
+      if (dropOnTrash) {
+        dropProposal(key);
+        return;
+      }
+      if (drag.mode === 'move') {
+        const s2 = new Date(drag.origStart + dayShift * DAY_MS + minutes * 60_000);
+        editProposal(key, { start: snapDisabled ? s2 : snap(s2, 'day') });
+      } else {
+        const e2 = new Date(drag.origEnd + minutes * 60_000);
+        const endAt = snapDisabled ? e2 : snap(e2, 'day');
+        const min = drag.origStart + V.snapMinutes * 60_000;
+        editProposal(key, { end: new Date(Math.max(endAt.getTime(), min)) });
+      }
+      force((n) => n + 1);
+      return;
+    }
 
     if (dropOnTrash) {
       await removeBlock(b.id);
@@ -312,14 +400,49 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
                 className={`day-col${today ? ' today' : ''}${isWeekend(d) ? ' weekend' : ''}`}
                 style={{ left, width: colW }}
               >
+                {/* 수면 — 보여주기만 한다 */}
+                {busyByDay[i]?.sleeps.map((sl) => (
+                  <div key={sl.id} className="col-sleep" style={{ top: sl.top, height: sl.bottom - sl.top }} />
+                ))}
+
+                {/* 고정 일정 — 체크는 여기서 한다. 띠 자체는 클릭을 먹지 않는다 (드래그 방해 금지) */}
+                {busyByDay[i]?.routines.map(({ o, top, bottom }) => {
+                  const done = !!routineChecks[checkKey(o.routine.id, o.day)];
+                  const future = o.day > ymd(now);
+                  return (
+                    <div
+                      key={`${o.routine.id}:${o.day}`}
+                      className="col-routine"
+                      data-done={done}
+                      style={{ top, height: bottom - top, borderColor: o.routine.color }}
+                    >
+                      <button
+                        type="button"
+                        className="rc-check"
+                        disabled={future}
+                        aria-pressed={done}
+                        title={future ? '아직 오지 않은 날이다' : done ? '체크 해제' : '했다고 표시'}
+                        style={done ? { background: o.routine.color, borderColor: o.routine.color } : undefined}
+                        onClick={() => void toggleRoutineCheck(o.routine.id, o.day)}
+                      >
+                        {done ? '✓' : ''}
+                      </button>
+                      <span className="rc-name" style={{ color: o.routine.color }}>
+                        {o.routine.name}
+                      </span>
+                    </div>
+                  );
+                })}
+
                 {today && (
                   <div className="tl-now col-now" style={{ top: nowY }}>
                     {i === 0 && <span className="tl-now-label">{nowLabel}</span>}
                   </div>
                 )}
                 {placed.map(({ item, offset, size, lane }) => {
+                  const prop = isProposal(item.id);
                   const task = item.task_id ? taskById.get(item.task_id) : undefined;
-                  const isEvent = !task;
+                  const isEvent = !task && !prop;
                   const color = task ? GRADE_COLOR[priorityScore(task, now).grade] : 'transparent';
                   const out = task ? isOutOfRange(item, task.due_at) : false;
                   const eventStyle: React.CSSProperties = isEvent
@@ -331,7 +454,7 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
                       ref={(el) => {
                         elRef.current[item.id] = el;
                       }}
-                      className="block"
+                      className={`block${prop ? ' block-proposal' : ''}`}
                       data-dragging={drag?.id === item.id}
                       data-out={out}
                       style={{
@@ -342,7 +465,7 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
                         background: color,
                         ...eventStyle,
                       }}
-                      title={`${task?.title ?? item.title ?? ''}\n${fmt(item.start_at)} – ${fmt(item.end_at)}`}
+                      title={`${prop ? '제안 · ' : ''}${task?.title ?? item.title ?? ''}\n${fmt(item.start_at)} – ${fmt(item.end_at)}`}
                       onPointerDown={(e) => onPointerDown(e, item, 'move')}
                       onClick={() => item.task_id && revealTask(item.task_id)}
                     >
@@ -360,6 +483,9 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
     </div>
   );
 }
+
+/** 제안 블록은 id가 'p:'로 시작한다. 진짜 Block과 섞이지 않게 한 곳에서만 판별한다 */
+const isProposal = (id: string) => id.startsWith('p:');
 
 function fmt(iso: string) {
   const d = new Date(iso);

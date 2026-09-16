@@ -1,4 +1,4 @@
-import type { Block, Routine, Settings, Tag, Task } from './types';
+import type { Block, Routine, RoutineCheck, Settings, Tag, Task } from './types';
 
 /**
  * 8장 "세 번째 길" — 백엔드 결정을 미루는 경계.
@@ -67,6 +67,14 @@ export interface RoutineRepo {
   remove(id: string): Promise<void>;
 }
 
+/** 고정 일정을 그 날 했는지. 키가 `${routine_id}:${day}`라 토글이 멱등이다 */
+export interface RoutineCheckRepo {
+  /** 로컬 날짜 문자열 범위 (양끝 포함) */
+  listRange(from: string, to: string): Promise<RoutineCheck[]>;
+  /** 없으면 체크, 있으면 해제. 새 상태를 돌려준다 */
+  toggle(routineId: string, day: string): Promise<RoutineCheck>;
+}
+
 /** 사용자당 한 행. 없으면 null — 호출하는 쪽이 기본값(DEFAULT_SLEEP)을 쓴다 */
 export interface SettingsRepo {
   get(): Promise<Settings | null>;
@@ -78,5 +86,6 @@ export interface Repos {
   blocks: BlockRepo;
   tags: TagRepo;
   routines: RoutineRepo;
+  routineChecks: RoutineCheckRepo;
   settings: SettingsRepo;
 }

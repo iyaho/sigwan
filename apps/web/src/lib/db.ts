@@ -4,6 +4,8 @@ import type {
   BlockRepo,
   Repos,
   Routine,
+  RoutineCheck,
+  RoutineCheckRepo,
   RoutineRepo,
   Settings,
   SettingsRepo,
@@ -14,7 +16,7 @@ import type {
   TaskRepo,
   TaskTag,
 } from '@sigwan/core';
-import { makeMockData, nowIso } from '@sigwan/core';
+import { checkKey, makeMockData, nowIso } from '@sigwan/core';
 import Dexie, { type EntityTable } from 'dexie';
 
 /**
@@ -31,6 +33,7 @@ class SigwanDb extends Dexie {
   tags!: EntityTable<Tag, 'id'>;
   task_tags!: EntityTable<TaskTag & { id: string }, 'id'>;
   routines!: EntityTable<Routine, 'id'>;
+  routine_checks!: EntityTable<RoutineCheck, 'id'>;
   /** 사용자당 한 행이라 기본키가 user_id다 */
   settings!: EntityTable<Settings, 'user_id'>;
 
@@ -46,6 +49,10 @@ class SigwanDb extends Dexie {
     this.version(2).stores({
       routines: 'id, deleted_at, rev',
       settings: 'user_id',
+    });
+    // 고정 일정 체크. day에 인덱스가 있어야 화면에 보이는 기간만 읽어온다
+    this.version(3).stores({
+      routine_checks: 'id, routine_id, day, deleted_at, rev',
     });
   }
 }
@@ -216,6 +223,34 @@ class LocalRoutineRepo implements RoutineRepo {
   }
 }
 
+class LocalRoutineCheckRepo implements RoutineCheckRepo {
+  async listRange(from: string, to: string) {
+    const rows = await db.routine_checks.where('day').between(from, to, true, true).toArray();
+    return rows.filter((c) => !c.deleted_at);
+  }
+  /**
+   * id를 계산해서 쓰므로 같은 날 같은 일정에 두 줄이 생기지 않는다.
+   * 해제는 물리 삭제가 아니라 툼스톤 — 다른 기기에 "지웠다"를 전해야 한다 (7장).
+   */
+  async toggle(routineId: string, day: string) {
+    const id = checkKey(routineId, day);
+    const cur = await db.routine_checks.get(id);
+    const next: RoutineCheck = cur
+      ? { ...cur, checked_at: nowIso(), deleted_at: cur.deleted_at ? null : nowIso(), rev: cur.rev + 1 }
+      : {
+          id,
+          user_id: USER_ID,
+          routine_id: routineId,
+          day,
+          checked_at: nowIso(),
+          deleted_at: null,
+          rev: 0,
+        };
+    await db.routine_checks.put(next);
+    return next;
+  }
+}
+
 class LocalSettingsRepo implements SettingsRepo {
   async get() {
     return (await db.settings.get(USER_ID)) ?? null;
@@ -232,5 +267,6 @@ export const repos: Repos = {
   blocks: new LocalBlockRepo(),
   tags: new LocalTagRepo(),
   routines: new LocalRoutineRepo(),
+  routineChecks: new LocalRoutineCheckRepo(),
   settings: new LocalSettingsRepo(),
 };

@@ -95,13 +95,13 @@ body:has(.splitter-y[data-dragging='true']) { cursor: row-resize; }
 .brand { font-weight: 650; font-size: var(--fs-lg); color: var(--text); letter-spacing: -0.01em; }
 
 .navlist { list-style: none; margin: 0; padding: var(--sp-2); }
-.navlist button {
+.navlist > li > button {
   width: 100%; text-align: left; border: 0; background: transparent;
   padding: 7px var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-sm);
   display: flex; justify-content: space-between; align-items: center;
 }
-.navlist button:hover { background: var(--bg-sunken); }
-.navlist button[aria-current='true'] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.navlist > li > button:hover { background: var(--bg-sunken); }
+.navlist > li > button[aria-current='true'] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .count { font-size: var(--fs-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
 .section-label {
@@ -518,7 +518,7 @@ textarea.txt { resize: vertical; }
 
 .view-progress { display: inline-flex; align-items: center; gap: 6px; }
 .view-progress .progress-inline { width: 40px; margin: 0; }
-.navlist button[aria-current='true'] .progress { background: color-mix(in oklab, var(--accent) 18%, transparent); }
+.navlist > li > button[aria-current='true'] .progress { background: color-mix(in oklab, var(--accent) 18%, transparent); }
 .pct { min-width: 34px; text-align: right; }
 .range-progress .progress-inline { width: 64px; height: 5px; }
 .range-progress .pct { color: var(--text-dim); font-weight: 600; }
@@ -557,7 +557,10 @@ textarea.txt { resize: vertical; }
 .day-col.weekend { background: var(--weekend); }
 .day-col.today { background: color-mix(in oklab, var(--accent) 5%, transparent); }
 .col-now { left: 0; right: 0; }
-.cols-wrap .tl-tick.v { z-index: 0; }
+/* major에는 z-index를 주지 않는다. 값이 0이어도 쌓임 맥락이 생겨서
+   그 안의 .tl-label(z-index 3)이 거터(z-index 2) 위로 못 올라간다 —
+   142줄에서 고쳐놓은 것을 이 줄이 되돌리고 있었다. */
+.cols-wrap .tl-tick.v:not(.major) { z-index: 0; }
 .cols-wrap .block { z-index: 2; }
 
 /* ── 달력 격자 (월·분기) ────────────────────────────────────────── */
@@ -720,20 +723,113 @@ textarea.txt { resize: vertical; }
 .set-card .sub-row { margin-top: 6px; }
 .set-card .count { display: block; margin-top: var(--sp-2); }
 
-.set-list { list-style: none; margin: var(--sp-2) 0 0; padding: 0; }
-.set-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: var(--fs-sm);
-}
-.set-row-name { font-weight: 600; color: var(--text); }
-.set-row-when { color: var(--text-dim); font-variant-numeric: tabular-nums; }
-/* 수정·삭제는 오른쪽 끝에 붙인다 */
-.set-row .icon-btn:nth-last-of-type(2) { margin-left: auto; }
+/* ── 고정 일정 시간표 (에브리타임식) ─────────────────────────────── */
+.rg { margin-top: var(--sp-2); }
 
+.rg-head { display: flex; align-items: center; padding-bottom: 4px; }
+.rg-dow {
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.rg-body {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  overflow: hidden;
+  touch-action: none;   /* 세로 드래그가 스크롤로 먹히지 않게 */
+  user-select: none;
+  cursor: crosshair;
+}
+
+/* 매시 눈금. 라벨은 왼쪽 거터에 */
+.rg-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid var(--border);
+  pointer-events: none;
+}
+.rg-time {
+  position: absolute;
+  left: 4px;
+  top: -7px;
+  font-size: 10px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  background: var(--bg);
+  padding-right: 3px;
+}
+
+.rg-col { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border); }
+.rg-col.weekend { background: var(--weekend); }
+
+/* 수면 — 보여주기만 한다. 여기를 눌러 일정을 만들 일은 없다 */
+.rg-sleep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--bg-sunken) 0 6px,
+    transparent 6px 12px
+  );
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  pointer-events: none;
+}
+
+.rg-block {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 3px 5px;
+  color: #fff;
+  font-size: 10.5px;
+  line-height: 1.25;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.rg-block b { font-weight: 600; }
+.rg-block span { opacity: 0.85; font-variant-numeric: tabular-nums; }
+.rg-block:hover { filter: brightness(0.93); }
+.rg-block[aria-pressed='true'] { outline: 2px solid var(--text); outline-offset: -2px; }
+
+/* 드래그 중 미리보기 */
+.rg-draft {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  border: 1.5px dashed var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  padding: 1px 4px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.rg-draft[data-bad='true'] {
+  border-color: var(--grade-now);
+  color: var(--grade-now);
+  background: transparent;
+}
+
+.rg-foot { display: flex; align-items: center; gap: var(--sp-2); margin-top: 6px; }
+.rg-foot .hint { margin: 0; }
+.rg-foot .icon-btn { margin-left: auto; white-space: nowrap; }
+
+/* 격자 아래에 붙는 편집 카드 */
 .set-form {
   border: 1px solid var(--accent);
   border-radius: var(--r-md);
@@ -748,4 +844,183 @@ textarea.txt { resize: vertical; }
 
 @media (max-width: 560px) {
   .set-grid { grid-template-columns: 1fr; }
+}
+
+/* ── 타임라인의 막힌 시간 + 고정 일정 체크 (3.8) ──────────────────── */
+
+/* 수면. 배경일 뿐이라 클릭을 먹지 않는다 — 여기에도 블록을 떨어뜨릴 수 있어야 한다 */
+.col-sleep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(-45deg, var(--bg-sunken) 0 7px, transparent 7px 14px);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+/* 고정 일정. 띠는 통과시키고 체크 단추만 받는다 (드래그를 막으면 안 된다) */
+.col-routine {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  z-index: 1;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 3px 5px;
+  border-left: 3px solid;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+  overflow: hidden;
+}
+.col-routine[data-done='true'] { opacity: 0.5; }
+.col-routine[data-done='true'] .rc-name { text-decoration: line-through; }
+
+.rc-name { font-size: var(--fs-xs); font-weight: 600; line-height: 1.2; }
+
+.rc-check {
+  pointer-events: auto;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg-panel);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rc-check:hover:not(:disabled) { border-color: var(--accent); }
+.rc-check:disabled { opacity: 0.35; cursor: default; }
+
+/* 고정 일정 개수 — 점수와 섞이지 않게 위 진행률과 떨어뜨려 둔다 */
+.fixed-count {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── 3.8 자동 배치 제안 ──────────────────────────────────────────── */
+
+/* 점선 = 아직 저장되지 않았다. 끌어 옮길 수 있고, 목록으로 던지면 그 제안만 빠진다 */
+.block-proposal {
+  border: 1.5px dashed var(--accent) !important;
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent) !important;
+  color: var(--accent);
+  box-shadow: none !important;
+  font-weight: 600;
+}
+.block-proposal::after {
+  content: '제안';
+  position: absolute;
+  right: 3px;
+  top: 2px;
+  font-size: 9px;
+  opacity: 0.7;
+  font-weight: 400;
+}
+
+/* 오른쪽 아래에 떠 있는 검토 카드. 화면 배치를 건드리지 않으려고 fixed로 둔다 */
+.auto-card {
+  position: fixed;
+  right: var(--sp-4);
+  bottom: var(--sp-4);
+  z-index: 90;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(60vh, 560px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-panel);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.24);
+}
+
+.auto-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+.auto-head .count { margin-left: auto; }
+
+.auto-body { overflow: auto; padding: var(--sp-2) var(--sp-3); flex: 1 1 auto; }
+
+.auto-day { margin-bottom: var(--sp-3); }
+.auto-day-label {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.auto-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: 3px 0;
+  font-size: var(--fs-sm);
+}
+.auto-time {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.auto-title {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auto-title:hover { color: var(--accent); text-decoration: underline; }
+
+/* 여기가 이 패널의 요점이다 — 채운 것보다 못 채운 것 */
+.auto-unplaced {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--grade-now);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--grade-now) 7%, transparent);
+}
+.auto-unplaced-head {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--grade-now);
+  margin-bottom: 2px;
+}
+.auto-unplaced .auto-row { flex-wrap: wrap; }
+.auto-reason { font-size: var(--fs-xs); color: var(--text-dim); flex-basis: 100%; }
+
+.auto-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+.auto-foot .hint { margin: 0; flex: 1 1 auto; }
+
+@media (max-width: 720px) {
+  .auto-card { left: var(--sp-4); width: auto; }
 }

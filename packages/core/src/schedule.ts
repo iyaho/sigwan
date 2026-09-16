@@ -42,24 +42,46 @@ export const isVirtual = (b: Block) => b.id.startsWith('v:');
  * 고정 일정을 [from, to) 구간의 가상 Block으로 펼친다.
  * 요일은 0=월 … 6=일. Date.getDay()는 0=일이라 변환한다.
  */
-export function expandRoutines(routines: Routine[], from: Date, to: Date): Block[] {
-  const out: Block[] = [];
+export interface RoutineOccurrence {
+  routine: Routine;
+  /** 로컬 날짜 YYYY-MM-DD. 체크 기록의 키가 된다 */
+  day: string;
+  start: Date;
+  end: Date;
+}
+
+/**
+ * 규칙을 실제 날짜로 펼친다. 화면은 이걸 쓴다 — Routine 원본이 있어야
+ * 색을 칠하고 그 날짜의 체크를 토글할 수 있다.
+ */
+export function routineOccurrences(routines: Routine[], from: Date, to: Date): RoutineOccurrence[] {
+  const out: RoutineOccurrence[] = [];
   const end = to.getTime();
   for (let d = startOfDay(from); d.getTime() < end; d = addDays(d, 1)) {
     const wd = (d.getDay() + 6) % 7;
-    const key = ymd(d);
+    const day = ymd(d);
     for (const r of routines) {
       if (r.deleted_at || !r.weekdays.includes(wd)) continue;
-      if (r.active_from && key < r.active_from) continue;
-      if (r.active_to && key > r.active_to) continue;
+      if (r.active_from && day < r.active_from) continue;
+      if (r.active_to && day > r.active_to) continue;
       const s = new Date(d.getTime() + r.start_min * 60_000);
       const e = new Date(d.getTime() + r.end_min * 60_000);
       if (e.getTime() <= from.getTime() || s.getTime() >= end) continue;
-      out.push(virtualBlock(`${r.id}:${key}`, r.name, s, e));
+      out.push({ routine: r, day, start: s, end: e });
     }
   }
   return out;
 }
+
+/** 배치 계산이 쓰는 형태 — 가상 Block. 저장되지 않는다 */
+export function expandRoutines(routines: Routine[], from: Date, to: Date): Block[] {
+  return routineOccurrences(routines, from, to).map((o) =>
+    virtualBlock(`${o.routine.id}:${o.day}`, o.routine.name, o.start, o.end),
+  );
+}
+
+/** 체크 기록의 키. 웹과 앱이 같은 규칙으로 만들어야 같은 행을 가리킨다 */
+export const checkKey = (routineId: string, day: string) => `${routineId}:${day}`;
 
 /**
  * 수면을 가상 Block으로. 어느 규칙을 쓸지는 **기상하는 날**의 요일로 정한다.

@@ -1,5 +1,7 @@
-import type { Block, FitResult, Routine, Settings, SleepPattern, Tag, Task, ZoomLevel } from '@sigwan/core';
+import type { AutoScheduleResult, Block, FitResult, Proposal, Routine, Settings, SleepPattern, Tag, Task, ZoomLevel } from '@sigwan/core';
 import {
+  addDays,
+  autoSchedule,
   DEFAULT_GAP_MIN,
   DEFAULT_SLEEP,
   FIT_LIMIT_LABEL,
@@ -10,6 +12,8 @@ import {
   progressOf,
   fitSummary,
   nowIso,
+  proposalToBlock,
+  ymd,
   remainingToSchedule,
   type ViewKey,
   viewThatShows,
@@ -28,6 +32,8 @@ interface State {
   taskTags: Record<string, string[]>;
   /** 3.8 고정 일정 — 저장은 규칙으로, 화면에서 그때그때 펼친다 */
   routines: Routine[];
+  /** 체크한 것만 담는다. 키는 `${routine_id}:${day}` (core/checkKey) */
+  routineChecks: Record<string, true>;
   /** 설정은 없을 수 있다. 없으면 기본값으로 시작하고 처음 저장할 때 행이 생긴다 */
   settings: Settings;
 
@@ -48,12 +54,27 @@ interface State {
   setOrigin: (d: Date) => void;
   setSnapDisabled: (b: boolean) => void;
 
+  /**
+   * 3.8 자동 배치 제안. **저장된 것이 아니다** — 사람이 보고 고치고 「적용」을 눌러야 Block이 된다.
+   * 남의 일정을 말없이 바꾸지 않는다 (명세 15장).
+   */
+  proposals: Proposal[];
+  /** 못 넣은 것·빈 시간 같은 요약. 제안보다 이쪽이 중요한 정보다 */
+  autoResult: AutoScheduleResult | null;
+  propose: () => void;
+  editProposal: (key: string, patch: { start?: Date; end?: Date }) => void;
+  dropProposal: (key: string) => void;
+  clearProposals: () => void;
+  applyProposals: () => Promise<void>;
+
   /** 3.8 설정 — 수면 네 값과 자동 배치 간격 */
   saveSleep: (sleep: SleepPattern) => Promise<void>;
   setGapMin: (min: number) => Promise<void>;
   saveRoutine: (r: Routine) => Promise<void>;
   addRoutine: (draft: Omit<Routine, 'id' | 'user_id' | 'deleted_at' | 'rev'>) => Promise<string>;
   removeRoutine: (id: string) => Promise<void>;
+  /** 그 날짜의 고정 일정 체크를 켜고 끈다 */
+  toggleRoutineCheck: (routineId: string, day: string) => Promise<void>;
 
   saveTask: (t: Task) => Promise<void>;
   toggleDone: (id: string) => Promise<void>;
@@ -118,7 +139,10 @@ export const useStore = create<State>((set, get) => ({
   tags: [],
   taskTags: {},
   routines: [],
+  routineChecks: {},
   settings: defaultSettings(),
+  proposals: [],
+  autoResult: null,
 
   view: 'today',
   search: '',
@@ -144,9 +168,15 @@ export const useStore = create<State>((set, get) => ({
       from: new Date(o.getTime() - 30 * 864e5).toISOString(),
       to: new Date(o.getTime() + 60 * 864e5).toISOString(),
     });
+    const checkRows = await repos.routineChecks.listRange(
+      ymd(new Date(o.getTime() - 30 * 864e5)),
+      ymd(new Date(o.getTime() + 60 * 864e5)),
+    );
+    const routineChecks: Record<string, true> = {};
+    for (const c of checkRows) routineChecks[c.id] = true;
     const taskTags: Record<string, string[]> = {};
     for (const t of tasks) taskTags[t.id] = (await repos.tags.tagsOf(t.id)).map((x) => x.id);
-    set({ tasks, blocks, tags, taskTags, routines, settings: settings ?? defaultSettings(), ready: true });
+    set({ tasks, blocks, tags, taskTags, routines, routineChecks, settings: settings ?? defaultSettings(), ready: true });
     })();
     return loading;
   },
@@ -192,6 +222,78 @@ export const useStore = create<State>((set, get) => ({
   async removeRoutine(id) {
     await repos.routines.remove(id);
     set((s) => ({ routines: s.routines.filter((r) => r.id !== id) }));
+  },
+
+  /** 지금부터 7일. 범위를 넓히면 "다음 주 화요일 오전"처럼 안 지킬 약속이 늘어난다 */
+  propose() {
+    const st = get();
+    const now = new Date();
+    const res = autoSchedule({
+      tasks: st.tasks,
+      blocks: st.blocks,
+      routines: st.routines,
+      sleep: st.settings.sleep,
+      from: now,
+      to: addDays(startOfDay(now), 7),
+      now,
+      gapMin: st.settings.gap_min,
+    });
+    set({ proposals: res.proposals, autoResult: res });
+    if (!res.proposals.length) {
+      set({
+        notice: res.unplaced.length
+          ? '넣을 자리가 없다 — 아래에서 이유를 본다'
+          : '자동으로 잡을 할 일이 없다',
+      });
+    }
+  },
+
+  editProposal(key, patch) {
+    set((s) => ({
+      proposals: s.proposals.map((p) => {
+        if (p.key !== key) return p;
+        const start = patch.start ?? new Date(p.start);
+        const end = patch.end ?? new Date(start.getTime() + p.minutes * 60_000);
+        return {
+          ...p,
+          start: start.toISOString(),
+          end: end.toISOString(),
+          minutes: Math.round((end.getTime() - start.getTime()) / 60_000),
+        };
+      }),
+    }));
+  },
+
+  dropProposal(key) {
+    set((s) => ({ proposals: s.proposals.filter((p) => p.key !== key) }));
+  },
+
+  clearProposals() {
+    set({ proposals: [], autoResult: null });
+  },
+
+  /** 여기서 처음으로 DB가 바뀐다 */
+  async applyProposals() {
+    const ps = get().proposals;
+    for (const p of ps) {
+      await get().saveBlock(proposalToBlock(p, newId(), 'local-user'));
+    }
+    const min = ps.reduce((m, p) => m + p.minutes, 0);
+    set({
+      proposals: [],
+      autoResult: null,
+      notice: `${ps.length}개 · ${Math.round((min / 60) * 10) / 10}시간을 넣었다`,
+    });
+  },
+
+  async toggleRoutineCheck(routineId, day) {
+    const row = await repos.routineChecks.toggle(routineId, day);
+    set((s) => {
+      const next = { ...s.routineChecks };
+      if (row.deleted_at) delete next[row.id];
+      else next[row.id] = true;
+      return { routineChecks: next };
+    });
   },
 
   async saveTask(t) {

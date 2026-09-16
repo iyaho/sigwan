@@ -186,6 +186,28 @@ export const SettingsSchema = z.object({
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
+/**
+ * 3.8 고정 일정 체크 — "오늘 그거 했나".
+ *
+ * id를 `${routine_id}:${day}`로 **계산해서** 만든다. 랜덤 id였다면 폰에서 한 번,
+ * 웹에서 한 번 체크했을 때 같은 날 체크가 두 줄 생긴다. 규칙으로 만들면 같은 행을
+ * 두 번 쓰는 것이라 7장 LWW가 그대로 먹는다.
+ *
+ * 체크 해제는 행을 지우지 않고 deleted_at을 찍는다. 학기가 끝나 고정 일정을 지워도
+ * 이 기록은 남는다 — 지난 석 달의 출석이 같이 사라지면 안 된다.
+ */
+export const RoutineCheckSchema = z.object({
+  id: z.string(),
+  user_id: z.string(),
+  routine_id: z.string(),
+  /** 로컬 날짜. UTC로 저장하면 자정 근처에서 어제 것이 된다 (7장) */
+  day: localDate,
+  checked_at: iso,
+  deleted_at: iso.nullable().default(null),
+  rev: z.number().int().default(0),
+});
+export type RoutineCheck = z.infer<typeof RoutineCheckSchema>;
+
 export const DEFAULT_SLEEP: SleepPattern = {
   weekdayStart: 60,
   weekdayEnd: 480,

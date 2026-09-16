@@ -1,4 +1,4 @@
-import { rangeProgress, shiftOrigin, startOfDay, viewRange, ZOOMS } from '@sigwan/core';
+import { checkKey, rangeProgress, routineOccurrences, shiftOrigin, startOfDay, viewRange, ymd, ZOOMS } from '@sigwan/core';
 import { useMemo } from 'react';
 import { useStore } from '../store';
 import { DayColumns } from './DayColumns';
@@ -18,11 +18,23 @@ import { QuarterGrid } from './QuarterGrid';
  * 주 뷰도 편집이 된다. 월·분기는 '언제 무엇이 걸려 있나'만 답하면 되므로 달력이 맞다.
  */
 export function Timeline() {
-  const { zoom, origin, tasks, setOrigin, setZoom } = useStore();
+  const { zoom, origin, tasks, routines, routineChecks, setOrigin, setZoom } = useStore();
   const range = useMemo(() => viewRange(zoom, origin), [zoom, origin]);
 
   const prog = useMemo(() => rangeProgress(tasks, range.start, range.end), [tasks, range]);
   const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : null;
+
+  /**
+   * 고정 일정은 Task가 아니다 — 점수·등급·위 진행률에 넣지 않는다.
+   * 수업 출석이 과제 우선순위를 밀어내면 안 된다. 그래서 따로 센다.
+   * 지나간 것만 분모에 넣는다. 아직 오지 않은 수업을 "안 했다"고 셀 이유가 없다.
+   */
+  const fixed = useMemo(() => {
+    const today = ymd(new Date());
+    const occ = routineOccurrences(routines, range.start, range.end).filter((o) => o.day <= today);
+    const done = occ.filter((o) => routineChecks[checkKey(o.routine.id, o.day)]).length;
+    return { done, total: occ.length };
+  }, [routines, routineChecks, range]);
 
   return (
     <>
@@ -55,6 +67,11 @@ export function Timeline() {
           </span>
           <span className="count pct">{pct === null ? '—' : `${pct}%`}</span>
         </span>
+        {fixed.total > 0 && (
+          <span className="fixed-count" title="고정 일정 — 지난 것 중 체크한 개수. 점수에는 들어가지 않는다">
+            고정 {fixed.done}/{fixed.total}
+          </span>
+        )}
         {zoom === 'day' || zoom === 'week' ? (
           <span className="head-hint">Alt = 스냅 해제 · 막대 아래끝 = 길이 조절{zoom === 'week' ? ' · 옆 열로 끌면 날짜 이동' : ''}</span>
         ) : (

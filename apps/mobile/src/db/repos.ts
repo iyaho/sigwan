@@ -256,7 +256,12 @@ class SqliteTagRepo implements TagRepo {
   }
 }
 
-export const repos: Repos & { tags: SqliteTagRepo } = {
+/**
+ * 앱은 아직 3.8(고정 일정·수면·체크) 저장소를 구현하지 않았다 — 화면도 없다.
+ * 그래서 Repos 전체가 아니라 가진 것만 declare한다. 웹과 나란히 맞추는 날
+ * 이 Pick을 Repos로 되돌리면, 빠뜨린 저장소를 컴파일러가 이름까지 대며 잡아준다.
+ */
+export const repos: Pick<Repos, 'tasks' | 'blocks' | 'tags'> & { tags: SqliteTagRepo } = {
   tasks: new SqliteTaskRepo(),
   blocks: new SqliteBlockRepo(),
   tags: new SqliteTagRepo(),

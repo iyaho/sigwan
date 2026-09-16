@@ -1,6 +1,7 @@
 import type * as React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AddTask } from './components/AddTask';
+import { AutoSchedule } from './components/AutoSchedule';
 import { DetailPanel } from './components/DetailPanel';
 import { Settings } from './components/Settings';
 import { Sidebar } from './components/Sidebar';
@@ -11,7 +12,7 @@ import { useLayout } from './lib/layout';
 import { useStore } from './store';
 
 export default function App() {
-  const { ready, load, setZoom, setOrigin, search, setSearch, select, notice, setNotice } =
+  const { ready, load, setZoom, setOrigin, search, setSearch, select, notice, setNotice, propose } =
     useStore();
   const searchRef = useRef<HTMLInputElement>(null);
   const {
@@ -154,9 +155,17 @@ export default function App() {
             <span className="trash-hint">여기로 막대를 끌면 블록만 지워진다</span>
             <button
               type="button"
+              onClick={propose}
+              className="ghost-btn"
+              style={{ marginLeft: 'auto' }}
+              title="아직 시간을 안 잡은 할 일을 수면·고정 일정을 피해 빈 자리에 넣어본다 (7일)"
+            >
+              자동 배치
+            </button>
+            <button
+              type="button"
               onClick={() => setAddOpen(true)}
               className="primary-btn primary-btn-sm"
-              style={{ marginLeft: 'auto' }}
             >
               + 할 일 (N)
             </button>
@@ -178,6 +187,7 @@ export default function App() {
       {detailMode === 'panel' && <DetailPanel />}
       <AddTask open={addOpen} onClose={() => setAddOpen(false)} />
       <Settings open={setOpen} onClose={() => setSetOpen(false)} />
+      <AutoSchedule />
       {notice && (
         <output className="toast" aria-live="polite">
           {notice}
