@@ -522,3 +522,78 @@ textarea.txt { resize: vertical; }
 .pct { min-width: 34px; text-align: right; }
 .range-progress .progress-inline { width: 64px; height: 5px; }
 .range-progress .pct { color: var(--text-dim); font-weight: 600; }
+
+/* ── 세로 열 (일·주) ─────────────────────────────────────────────── */
+.cols-canvas { position: relative; }
+.cols-top {
+  position: sticky; top: 0; z-index: 6;
+  display: flex; background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-strong);
+}
+.col-head { position: relative; flex: 0 0 auto; padding: 4px 6px 4px; min-width: 0; }
+.col-head.weekend { background: var(--weekend); }
+.col-head.today .col-num { background: var(--now-line); color: #fff; }
+.col-sep { position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: var(--border); }
+.col-date { border: 0; background: transparent; padding: 0; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.col-dow { font-size: var(--fs-xs); color: var(--text-faint); }
+.col-num {
+  font-size: var(--fs-sm); font-weight: 600; width: 22px; height: 22px; border-radius: 999px;
+  display: grid; place-items: center; font-variant-numeric: tabular-nums;
+}
+.col-date:hover .col-num { background: var(--bg-sunken); }
+.col-head.today .col-date:hover .col-num { background: var(--now-line); }
+.due-chips { display: flex; flex-direction: column; gap: 2px; overflow: hidden; margin-top: 2px; }
+.due-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid; border-radius: 4px; background: var(--bg);
+  font-size: var(--fs-xs); padding: 1px 6px; max-width: 100%; text-align: left;
+  color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.4;
+}
+.due-chip i { width: 6px; height: 6px; border-radius: 999px; flex: 0 0 auto; }
+.due-chip:hover { background: var(--bg-sunken); }
+
+.cols-body { position: absolute; left: 0; right: 0; }
+.day-col { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border); }
+.day-col.weekend { background: var(--weekend); }
+.day-col.today { background: color-mix(in oklab, var(--accent) 5%, transparent); }
+.col-now { left: 0; right: 0; }
+.cols-wrap .tl-tick.v { z-index: 0; }
+.cols-wrap .block { z-index: 2; }
+
+/* ── 달력 격자 (월·분기) ────────────────────────────────────────── */
+.mgrid { padding: var(--sp-3) var(--sp-4); }
+.mgrid-dow { display: grid; grid-template-columns: repeat(7, 1fr); font-size: var(--fs-xs); color: var(--text-faint); padding: 0 0 4px; }
+.mgrid-dow span { padding-left: 6px; }
+.mgrid-dow .weekend { color: var(--grade-now); opacity: 0.7; }
+.mgrid-week { display: grid; grid-template-columns: repeat(7, 1fr); border-top: 1px solid var(--border); }
+.mcell {
+  min-height: 96px; padding: 4px 4px 6px; border-right: 1px solid var(--border-soft, var(--border));
+  display: flex; flex-direction: column; gap: 3px; min-width: 0;
+}
+.mcell:last-child { border-right: 0; }
+.mcell.out { opacity: 0.4; }
+.mcell.weekend { background: var(--weekend); }
+.mcell.today { background: color-mix(in oklab, var(--accent) 7%, transparent); }
+.mcell-day {
+  border: 0; background: transparent; align-self: flex-start;
+  width: 24px; height: 24px; border-radius: 999px; font-size: var(--fs-sm); font-weight: 600;
+  display: grid; place-items: center; cursor: pointer; font-variant-numeric: tabular-nums; padding: 0;
+}
+.mcell-day:hover { background: var(--bg-sunken); }
+.mcell.today .mcell-day { background: var(--now-line); color: #fff; }
+.mcell-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mcell-more { border: 0; background: transparent; font-size: var(--fs-xs); color: var(--accent); text-align: left; padding: 0 6px; cursor: pointer; }
+.mcell-blocks { font-size: var(--fs-xs); color: var(--text-faint); padding: 0 6px; }
+
+/* 분기 — 미니 달력 3장 */
+.qgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); }
+@media (max-width: 1100px) { .qgrid { grid-template-columns: 1fr; } }
+.mgrid.compact { padding: 0; }
+.mgrid-title { font-weight: 600; font-size: var(--fs-md); margin-bottom: 6px; }
+.mgrid.compact .mcell { min-height: 40px; align-items: center; padding: 3px 2px 5px; gap: 2px; }
+.mgrid.compact .mcell-day { width: 22px; height: 22px; font-size: var(--fs-xs); align-self: center; }
+.mdots {
+  min-width: 8px; height: 8px; border-radius: 999px; font-size: 9px; color: #fff; line-height: 8px;
+  padding: 0 2px; text-align: center; font-weight: 600;
+}
+.head-hint { margin-left: auto; font-size: var(--fs-xs); color: var(--text-faint); white-space: nowrap; }
