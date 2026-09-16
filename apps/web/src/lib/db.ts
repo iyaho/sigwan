@@ -3,6 +3,10 @@ import type {
   BlockRange,
   BlockRepo,
   Repos,
+  Routine,
+  RoutineRepo,
+  Settings,
+  SettingsRepo,
   Tag,
   TagRepo,
   Task,
@@ -26,6 +30,9 @@ class SigwanDb extends Dexie {
   blocks!: EntityTable<Block, 'id'>;
   tags!: EntityTable<Tag, 'id'>;
   task_tags!: EntityTable<TaskTag & { id: string }, 'id'>;
+  routines!: EntityTable<Routine, 'id'>;
+  /** 사용자당 한 행이라 기본키가 user_id다 */
+  settings!: EntityTable<Settings, 'user_id'>;
 
   constructor() {
     super('sigwan');
@@ -34,6 +41,11 @@ class SigwanDb extends Dexie {
       blocks: 'id, task_id, start_at, end_at, deleted_at, rev',
       tags: 'id, name, sort_order, deleted_at',
       task_tags: 'id, task_id, tag_id',
+    });
+    // 3.8 고정 일정·수면. 기존 테이블은 그대로 두고 두 개만 더한다.
+    this.version(2).stores({
+      routines: 'id, deleted_at, rev',
+      settings: 'user_id',
     });
   }
 }
@@ -184,8 +196,41 @@ class LocalTagRepo implements TagRepo {
   }
 }
 
+/** 3.8 — 주 단위 규칙이라 범위 조회가 없다. 전부 읽어서 화면에서 펼친다 */
+class LocalRoutineRepo implements RoutineRepo {
+  async list() {
+    return (await db.routines.toArray())
+      .filter((r) => !r.deleted_at)
+      .sort((a, b) => a.start_min - b.start_min || a.name.localeCompare(b.name));
+  }
+  async upsert(r: Routine) {
+    const next = { ...r, user_id: USER_ID, rev: r.rev + 1 };
+    await db.routines.put(next);
+    return next;
+  }
+  async remove(id: string) {
+    const r = await db.routines.get(id);
+    if (!r) return;
+    // 툼스톤 — 지운 수업이 지난 주 화면에서까지 사라지면 기록이 틀어진다 (7장)
+    await db.routines.put({ ...r, deleted_at: nowIso(), rev: r.rev + 1 });
+  }
+}
+
+class LocalSettingsRepo implements SettingsRepo {
+  async get() {
+    return (await db.settings.get(USER_ID)) ?? null;
+  }
+  async save(s: Settings) {
+    const next = { ...s, user_id: USER_ID, updated_at: nowIso(), rev: s.rev + 1 };
+    await db.settings.put(next);
+    return next;
+  }
+}
+
 export const repos: Repos = {
   tasks: new LocalTaskRepo(),
   blocks: new LocalBlockRepo(),
   tags: new LocalTagRepo(),
+  routines: new LocalRoutineRepo(),
+  settings: new LocalSettingsRepo(),
 };

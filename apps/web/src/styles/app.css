@@ -684,3 +684,68 @@ textarea.txt { resize: vertical; }
     transform: translate(-50%, 6px);
   }
 }
+
+/* ── 3.8 설정 — 수면 · 자동 배치 간격 · 고정 일정 ─────────────────────── */
+
+/* 사이드바 바닥. dev 버튼과 같은 자리를 나눠 쓴다 */
+.side-foot {
+  flex: 0 0 auto;
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+.side-foot .icon-btn { width: 100%; text-align: left; padding: 4px 6px; }
+
+/* 이 다이얼로그는 form 하나로 감싸지 않는다 — 값이 바뀔 때마다 즉시 저장하기 때문이다.
+   .add-dialog의 높이 제한을 form 없이 받으려면 여기서 직접 세로 flex가 돼야 한다. */
+/* display는 [open]일 때만 준다. 브라우저 기본 스타일의
+   `dialog:not([open]) { display: none }`은 작성자 스타일에 항상 지기 때문에,
+   조건 없이 display를 주면 닫힌 창이 페이지에 그대로 남는다. */
+.set-dialog { width: min(620px, calc(100vw - 32px)); }
+.set-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.set-dialog .add-body { flex: 1 1 auto; }
+/* 「+ 추가」를 라벨 오른쪽 끝으로 밀기 위해 이 안에서만 flex */
+.set-dialog .fld-label { display: flex; align-items: center; gap: var(--sp-2); }
+
+.set-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); margin-top: var(--sp-2); }
+.set-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-sunken);
+  padding: var(--sp-3);
+}
+.set-card-title { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+.set-card .sub-row { margin-top: 6px; }
+.set-card .count { display: block; margin-top: var(--sp-2); }
+
+.set-list { list-style: none; margin: var(--sp-2) 0 0; padding: 0; }
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+}
+.set-row-name { font-weight: 600; color: var(--text); }
+.set-row-when { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+/* 수정·삭제는 오른쪽 끝에 붙인다 */
+.set-row .icon-btn:nth-last-of-type(2) { margin-left: auto; }
+
+.set-form {
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  margin-top: var(--sp-2);
+  background: var(--bg-sunken);
+}
+.set-form .sub-row:first-child { margin-top: 0; }
+.set-form .chips { margin-top: var(--sp-2); }
+
+.err { font-size: var(--fs-xs); color: var(--grade-now); margin: var(--sp-2) 0 0; }
+
+@media (max-width: 560px) {
+  .set-grid { grid-template-columns: 1fr; }
+}

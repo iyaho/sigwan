@@ -117,6 +117,29 @@ export function freeSpans(from: Date, to: Date, busy: Block[]): Span[] {
   return out.filter((s) => s.end > s.start);
 }
 
+/**
+ * 빈 구간의 양 끝을 gapMin만큼 깎는다.
+ *
+ * 수업이 12:00에 끝나자마자 12:00에 다음 일을 시작할 수는 없다. 이동하고, 정리하고,
+ * 화장실도 간다. 붙여서 잡아두면 지키지 못하고 그때부터 시간표 전체가 밀린다.
+ *
+ * 범위의 처음(=지금)과 끝은 깎지 않는다. 그건 무언가에 맞닿은 게 아니라 경계다 —
+ * 지금이 14:00인데 14:10부터 시작하라고 할 이유가 없다.
+ */
+export function insetSpans(spans: Span[], gapMin: number, hardStart: number, hardEnd: number): Span[] {
+  if (gapMin <= 0) return spans;
+  const g = gapMin * 60_000;
+  return spans
+    .map((s) => ({
+      start: s.start > hardStart ? s.start + g : s.start,
+      end: s.end < hardEnd ? s.end - g : s.end,
+    }))
+    .filter((s) => s.end > s.start);
+}
+
+/** 설정의 기본 간격. 함수 기본값은 0이다 — core는 시키는 대로만 한다 */
+export const DEFAULT_GAP_MIN = 10;
+
 export interface Proposal {
   /** 화면에서 지우거나 옮길 때 쓰는 임시 키 */
   key: string;
@@ -139,7 +162,10 @@ export interface AutoScheduleInput {
   snapMinutes?: number;
   maxSessionMin?: number;
   minSessionMin?: number;
-  /** 블록 사이에 두는 여유(분). 연속으로 붙여 놓으면 실제로는 못 지킨다 */
+  /**
+   * 무언가에 맞닿는 자리마다 두는 여유(분) — 수업 직후, 기존 블록 직후, 앞 제안 직후.
+   * 0이면 딱 붙여 잡는다. 사용자 설정(settings.gap_min)이 기본 10분을 넣어준다.
+   */
   gapMin?: number;
 }
 
@@ -182,7 +208,8 @@ export function autoSchedule(input: AutoScheduleInput): AutoScheduleResult {
     ...expandRoutines(routines, start, to),
     ...sleepSpans(sleep, start, to),
   ];
-  let free = freeSpans(start, to, busy);
+  // 맞닿는 쪽만 깎는다. freeMin은 깎은 뒤로 센다 — 실제로 쓸 수 있는 시간이 그거다.
+  let free = insetSpans(freeSpans(start, to, busy), gapMin, start.getTime(), to.getTime());
   const freeMin = free.reduce((m, s) => m + (s.end - s.start) / 60_000, 0);
 
   const candidates = tasks

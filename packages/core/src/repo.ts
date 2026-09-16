@@ -1,4 +1,4 @@
-import type { Block, Tag, Task } from './types';
+import type { Block, Routine, Settings, Tag, Task } from './types';
 
 /**
  * 8장 "세 번째 길" — 백엔드 결정을 미루는 경계.
@@ -56,8 +56,27 @@ export interface TagRepo {
   tagsOf(taskId: string): Promise<Tag[]>;
 }
 
+/**
+ * 고정 일정 (3.8). 주 단위 규칙이므로 범위 조회가 없다 — 전부 읽어서 그때그때 펼친다
+ * (core/schedule.ts expandRoutines). 한 사람이 가질 규칙은 많아야 수십 개다.
+ */
+export interface RoutineRepo {
+  list(): Promise<Routine[]>;
+  upsert(routine: Routine): Promise<Routine>;
+  /** 툼스톤. 지운 수업이 지난 주 화면에서 사라지면 기록이 틀어진다 */
+  remove(id: string): Promise<void>;
+}
+
+/** 사용자당 한 행. 없으면 null — 호출하는 쪽이 기본값(DEFAULT_SLEEP)을 쓴다 */
+export interface SettingsRepo {
+  get(): Promise<Settings | null>;
+  save(settings: Settings): Promise<Settings>;
+}
+
 export interface Repos {
   tasks: TaskRepo;
   blocks: BlockRepo;
   tags: TagRepo;
+  routines: RoutineRepo;
+  settings: SettingsRepo;
 }

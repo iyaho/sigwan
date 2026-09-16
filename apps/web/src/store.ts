@@ -1,5 +1,7 @@
-import type { Block, FitResult, Tag, Task, ZoomLevel } from '@sigwan/core';
+import type { Block, FitResult, Routine, Settings, SleepPattern, Tag, Task, ZoomLevel } from '@sigwan/core';
 import {
+  DEFAULT_GAP_MIN,
+  DEFAULT_SLEEP,
   FIT_LIMIT_LABEL,
   fitBlock,
   filterByView,
@@ -7,6 +9,7 @@ import {
   parentUpdate,
   progressOf,
   fitSummary,
+  nowIso,
   remainingToSchedule,
   type ViewKey,
   viewThatShows,
@@ -23,6 +26,10 @@ interface State {
   blocks: Block[];
   tags: Tag[];
   taskTags: Record<string, string[]>;
+  /** 3.8 고정 일정 — 저장은 규칙으로, 화면에서 그때그때 펼친다 */
+  routines: Routine[];
+  /** 설정은 없을 수 있다. 없으면 기본값으로 시작하고 처음 저장할 때 행이 생긴다 */
+  settings: Settings;
 
   view: ViewKey;
   selectedTagIds: string[];
@@ -40,6 +47,13 @@ interface State {
   setZoom: (z: ZoomLevel) => void;
   setOrigin: (d: Date) => void;
   setSnapDisabled: (b: boolean) => void;
+
+  /** 3.8 설정 — 수면 네 값과 자동 배치 간격 */
+  saveSleep: (sleep: SleepPattern) => Promise<void>;
+  setGapMin: (min: number) => Promise<void>;
+  saveRoutine: (r: Routine) => Promise<void>;
+  addRoutine: (draft: Omit<Routine, 'id' | 'user_id' | 'deleted_at' | 'rev'>) => Promise<string>;
+  removeRoutine: (id: string) => Promise<void>;
 
   saveTask: (t: Task) => Promise<void>;
   toggleDone: (id: string) => Promise<void>;
@@ -80,6 +94,19 @@ interface State {
 /** StrictMode가 effect를 두 번 돌린다. 목 데이터 53건 × tagsOf 쿼리를 두 벌 돌릴 이유가 없다. */
 let loading: Promise<void> | null = null;
 
+/** 아직 저장된 설정이 없을 때. 첫 저장에서 이 값이 그대로 행이 된다 */
+function defaultSettings(): Settings {
+  return {
+    user_id: 'local-user',
+    sleep: DEFAULT_SLEEP,
+    weight_urgent: 0.6,
+    half_life_hours: 48,
+    gap_min: DEFAULT_GAP_MIN,
+    updated_at: nowIso(),
+    rev: 0,
+  };
+}
+
 function startOfDay(d = new Date()): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
@@ -90,6 +117,8 @@ export const useStore = create<State>((set, get) => ({
   blocks: [],
   tags: [],
   taskTags: {},
+  routines: [],
+  settings: defaultSettings(),
 
   view: 'today',
   search: '',
@@ -104,7 +133,12 @@ export const useStore = create<State>((set, get) => ({
     if (loading) return loading;
     loading = (async () => {
     await seedIfEmpty();
-    const [tasks, tags] = await Promise.all([repos.tasks.list(), repos.tags.list()]);
+    const [tasks, tags, routines, settings] = await Promise.all([
+      repos.tasks.list(),
+      repos.tags.list(),
+      repos.routines.list(),
+      repos.settings.get(),
+    ]);
     const o = get().origin;
     const blocks = await repos.blocks.list({
       from: new Date(o.getTime() - 30 * 864e5).toISOString(),
@@ -112,7 +146,7 @@ export const useStore = create<State>((set, get) => ({
     });
     const taskTags: Record<string, string[]> = {};
     for (const t of tasks) taskTags[t.id] = (await repos.tags.tagsOf(t.id)).map((x) => x.id);
-    set({ tasks, blocks, tags, taskTags, ready: true });
+    set({ tasks, blocks, tags, taskTags, routines, settings: settings ?? defaultSettings(), ready: true });
     })();
     return loading;
   },
@@ -129,6 +163,36 @@ export const useStore = create<State>((set, get) => ({
   setZoom: (zoom) => set({ zoom }),
   setOrigin: (origin) => set({ origin }),
   setSnapDisabled: (snapDisabled) => set({ snapDisabled }),
+
+  async saveSleep(sleep) {
+    const saved = await repos.settings.save({ ...get().settings, sleep });
+    set({ settings: saved });
+  },
+
+  async setGapMin(gap_min) {
+    const saved = await repos.settings.save({ ...get().settings, gap_min });
+    set({ settings: saved });
+  },
+
+  async saveRoutine(r) {
+    const saved = await repos.routines.upsert(r);
+    set((s) => ({
+      routines: s.routines.some((x) => x.id === saved.id)
+        ? s.routines.map((x) => (x.id === saved.id ? saved : x))
+        : [...s.routines, saved],
+    }));
+  },
+
+  async addRoutine(draft) {
+    const r: Routine = { ...draft, id: newId(), user_id: 'local-user', deleted_at: null, rev: 0 };
+    await get().saveRoutine(r);
+    return r.id;
+  },
+
+  async removeRoutine(id) {
+    await repos.routines.remove(id);
+    set((s) => ({ routines: s.routines.filter((r) => r.id !== id) }));
+  },
 
   async saveTask(t) {
     const saved = await repos.tasks.upsert(t);

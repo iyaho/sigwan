@@ -26,7 +26,7 @@ export const TAG_COLORS = [
   '#8b8d98',
 ];
 
-export function Sidebar() {
+export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { view, setView, tags, selectedTagIds, toggleTag, tasks, taskTags } = useStore();
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -194,6 +194,11 @@ export function Sidebar() {
         </ul>
         {!tags.length && <p className="hint" style={{ padding: '0 16px' }}>태그가 없다. + 로 만든다.</p>}
       </div>
+      <div className="side-foot">
+        <button type="button" className="icon-btn" onClick={onOpenSettings} title="수면·고정 일정 (3.8)">
+          ⚙ 설정
+        </button>
+      </div>
       {import.meta.env.DEV && (
         // 개발 빌드에만 있는 버튼. 목 데이터(16.8-4)를 지우고 다시 심는다 — 제품 빌드에서는 컴파일 자체가 빠진다
         <div className="dev-foot">
@@ -292,7 +297,7 @@ function TagEditRow({
   );
 }
 
-function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+export function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   const [open, setOpen] = useState(false);
   return (
     <span className="color-pick">

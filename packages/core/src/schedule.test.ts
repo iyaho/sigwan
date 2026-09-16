@@ -3,6 +3,7 @@ import {
   autoSchedule,
   expandRoutines,
   freeSpans,
+  insetSpans,
   mergeSpans,
   parseHhmm,
   sleepSpans,
@@ -260,5 +261,51 @@ describe('시각 파싱', () => {
     expect(parseHhmm('23:59')).toBe(1439);
     expect(parseHhmm('24:00')).toBeNull();
     expect(parseHhmm('9:5')).toBeNull();
+  });
+});
+
+describe('간격', () => {
+  const now = d('2026-09-16T09:00:00+09:00');
+  const to = new Date(now.getTime() + 7 * 864e5);
+
+  it('경계는 깎지 않고 맞닿은 쪽만 깎는다', () => {
+    const MIN = 60_000;
+    const out = insetSpans([{ start: 0, end: 10 * MIN }, { start: 20 * MIN, end: 30 * MIN }], 1, 0, 30 * MIN);
+    // 첫 구간의 시작(=범위 시작)과 마지막 구간의 끝(=범위 끝)은 경계라 그대로 둔다
+    expect(out[0]).toEqual({ start: 0, end: 9 * MIN });
+    expect(out[1]).toEqual({ start: 21 * MIN, end: 30 * MIN });
+  });
+
+  it('수업이 끝나자마자 붙이지 않는다', () => {
+    const t = task({ id: '과제', estimate_min: 60, due_at: '2026-09-16T23:59:00+09:00' });
+    const r = routine({ id: '수업', weekdays: [2], start_min: 9 * 60, end_min: 12 * 60 });
+    const { proposals } = autoSchedule({
+      tasks: [t], blocks: [], routines: [r], sleep: SLEEP, from: now, to, now, gapMin: 10,
+    });
+    const first = new Date(proposals[0]!.start);
+    expect(first.getHours()).toBe(12);
+    expect(first.getMinutes()).toBeGreaterThanOrEqual(10); // 15분 격자에 올라 12:15
+  });
+
+  it('연속된 제안 사이가 벌어진다', () => {
+    const a = task({ id: 'a', estimate_min: 60, due_at: '2026-09-16T23:59:00+09:00' });
+    const b = task({ id: 'b', estimate_min: 60, due_at: '2026-09-16T23:59:00+09:00' });
+    const { proposals } = autoSchedule({
+      tasks: [a, b], blocks: [], routines: [], sleep: SLEEP, from: now, to, now, gapMin: 10,
+    });
+    const sorted = [...proposals].sort((x, y) => Date.parse(x.start) - Date.parse(y.start));
+    expect(sorted.length).toBeGreaterThanOrEqual(2);
+    const gap = Date.parse(sorted[1]!.start) - Date.parse(sorted[0]!.end);
+    expect(gap).toBeGreaterThanOrEqual(10 * 60_000);
+  });
+
+  it('간격 0이면 예전처럼 딱 붙는다', () => {
+    const t = task({ id: '과제', estimate_min: 60, due_at: '2026-09-16T23:59:00+09:00' });
+    const r = routine({ id: '수업', weekdays: [2], start_min: 9 * 60, end_min: 12 * 60 });
+    const { proposals } = autoSchedule({
+      tasks: [t], blocks: [], routines: [r], sleep: SLEEP, from: now, to, now,
+    });
+    expect(new Date(proposals[0]!.start).getHours()).toBe(12);
+    expect(new Date(proposals[0]!.start).getMinutes()).toBe(0);
   });
 });

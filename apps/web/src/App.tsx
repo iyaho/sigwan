@@ -2,6 +2,7 @@ import type * as React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AddTask } from './components/AddTask';
 import { DetailPanel } from './components/DetailPanel';
+import { Settings } from './components/Settings';
 import { Sidebar } from './components/Sidebar';
 import { Splitter } from './components/Splitter';
 import { TaskList } from './components/TaskList';
@@ -26,6 +27,7 @@ export default function App() {
   } = useLayout();
   const mainRef = useRef<HTMLElement>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [setOpen, setSetOpen] = useState(false);
 
   useEffect(() => {
     void load();
@@ -59,6 +61,7 @@ export default function App() {
       }
       if (e.key === 'Escape') {
         setAddOpen(false);
+        setSetOpen(false);
         select(null);
       }
       if (e.key.toLowerCase() === 't') {
@@ -92,7 +95,7 @@ export default function App() {
       data-sidebar={sidebarCollapsed ? 'collapsed' : 'open'}
       style={{ '--sidebar-w': `${sidebarCollapsed ? 44 : sidebarPx}px` } as React.CSSProperties}
     >
-      <Sidebar />
+      <Sidebar onOpenSettings={() => setSetOpen(true)} />
 
       {sidebarCollapsed ? (
         <div className="splitter splitter-x" aria-hidden="true" />
@@ -174,6 +177,7 @@ export default function App() {
 
       {detailMode === 'panel' && <DetailPanel />}
       <AddTask open={addOpen} onClose={() => setAddOpen(false)} />
+      <Settings open={setOpen} onClose={() => setSetOpen(false)} />
       {notice && (
         <output className="toast" aria-live="polite">
           {notice}

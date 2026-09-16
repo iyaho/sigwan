@@ -179,6 +179,8 @@ export const SettingsSchema = z.object({
   /** 4장 — 급함↔중요 슬라이더와 반감 상수 */
   weight_urgent: z.number().min(0).max(1).default(0.6),
   half_life_hours: z.number().min(6).max(240).default(48),
+  /** 3.8 자동 배치 — 맞닿는 자리마다 두는 여유(분). 수업 직후 바로 시작할 수는 없다 */
+  gap_min: z.number().int().min(0).max(60).default(10),
   updated_at: iso,
   rev: z.number().int().default(0),
 });
