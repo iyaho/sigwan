@@ -75,3 +75,24 @@ export function viewProgress(
   }
   return { done: pool.filter((t) => t.status === 'done').length, total: pool.length };
 }
+
+/** 타임라인이 보여주는 기간의 진행도 — 그 기간에 마감(또는 day_of)이 있는 할 일 기준 */
+export function rangeProgress(
+  tasks: Task[],
+  from: Date,
+  to: Date,
+): { done: number; total: number } {
+  const f = from.getTime();
+  const t = to.getTime();
+  const fDay = localDate(from);
+  const tDay = localDate(new Date(t - 1));
+  const pool = tasks.filter((x) => {
+    if (x.deleted_at || x.kind === 'someday') return false;
+    if (x.due_at) {
+      const d = Date.parse(x.due_at);
+      return d >= f && d < t;
+    }
+    return !!x.day_of && x.day_of >= fDay && x.day_of <= tDay;
+  });
+  return { done: pool.filter((x) => x.status === 'done').length, total: pool.length };
+}

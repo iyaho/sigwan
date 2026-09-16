@@ -14,6 +14,7 @@ import {
   timeToPx,
 } from '@sigwan/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { rangeProgress } from '../lib/views';
 import { useStore } from '../store';
 
 /**
@@ -172,6 +173,12 @@ export function Timeline() {
     n.setDate(n.getDate() + dir * days);
     useStore.getState().setOrigin(n);
   };
+
+  const rangeProg = useMemo(
+    () => rangeProgress(tasks, origin, new Date(origin.getTime() + spanMinutes * 60_000)),
+    [tasks, origin, spanMinutes],
+  );
+  const rangePct = rangeProg.total ? Math.round((rangeProg.done / rangeProg.total) * 100) : null;
 
   const tickList = useMemo(() => ticks(origin, axisPx, zoom), [origin, axisPx, zoom]);
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
@@ -339,6 +346,15 @@ export function Timeline() {
           </button>
         </span>
         <span className="range-label">{rangeLabel(origin, zoom, spanMinutes)}</span>
+        <span
+          className="view-progress range-progress"
+          title={`이 기간에 마감이 있는 할 일 — 완료 ${rangeProg.done} / 전체 ${rangeProg.total}`}
+        >
+          <span className="progress progress-inline">
+            <span className="progress-bar" style={{ width: `${rangePct ?? 0}%` }} />
+          </span>
+          <span className="count pct">{rangePct === null ? '—' : `${rangePct}%`}</span>
+        </span>
         {!vertical && (
           <span className="urg-legend" title="기간 막대 색 = 마감 임박도. 점수의 U와 같은 값">
             멀다 <i /> 급하다

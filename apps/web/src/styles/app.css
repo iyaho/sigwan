@@ -520,3 +520,5 @@ textarea.txt { resize: vertical; }
 .view-progress .progress-inline { width: 40px; margin: 0; }
 .navlist button[aria-current='true'] .progress { background: color-mix(in oklab, var(--accent) 18%, transparent); }
 .pct { min-width: 34px; text-align: right; }
+.range-progress .progress-inline { width: 64px; height: 5px; }
+.range-progress .pct { color: var(--text-dim); font-weight: 600; }
