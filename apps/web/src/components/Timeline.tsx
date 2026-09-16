@@ -339,6 +339,11 @@ export function Timeline() {
           </button>
         </span>
         <span className="range-label">{rangeLabel(origin, zoom, spanMinutes)}</span>
+        {!vertical && (
+          <span className="urg-legend" title="기간 막대 색 = 마감 임박도. 점수의 U와 같은 값">
+            멀다 <i /> 급하다
+          </span>
+        )}
         {!vertical && <span className="readonly-note">읽기 전용 — 막대가 {Math.round(120 * spec.pxPerMinute)}px라 드래그 불가</span>}
         {vertical && <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-faint)' }}>Alt = 스냅 해제 · 막대 아래끝 = 길이 조절</span>}
       </div>
@@ -366,7 +371,7 @@ export function Timeline() {
           {ghosts.placed.map(({ item, offset, size, lane }) => {
             const task = taskById.get(item.task_id as string);
             if (!task) return null;
-            const grade = priorityScore(task, now).grade;
+            const urg = urgencyColor(priorityScore(task, now).urgency);
             if (!task.start_at) {
               // 마일스톤 — 마감 시각에 마름모
               return (
@@ -376,7 +381,7 @@ export function Timeline() {
                   style={{
                     left: GUTTER + offset + size - 6,
                     top: HEAD_H + 6 + lane * (GHOST_H + 2) + 2,
-                    background: GRADE_COLOR[grade],
+                    background: urg,
                   }}
                   title={`${task.title}\n마감 ${fmtDay(item.end_at)}`}
                   onClick={() => revealTask(task.id)}
@@ -392,8 +397,10 @@ export function Timeline() {
                   width: Math.max(size, 6),
                   top: HEAD_H + 6 + lane * (GHOST_H + 2),
                   height: GHOST_H,
-                  borderColor: GRADE_COLOR[grade],
-                  color: GRADE_COLOR[grade],
+                  borderColor: urg,
+                  color: urg,
+                  // 화면 왼쪽 밖에서 시작하는 막대는 라벨을 보이는 첫 지점으로 민다
+                  paddingLeft: offset < 0 ? -offset + 8 : 8,
                 }}
                 title={`${task.title}\n기간 ${fmtDay(item.start_at)} → ${fmtDay(item.end_at)}`}
                 onClick={() => revealTask(task.id)}
@@ -498,6 +505,16 @@ function ZoomBar() {
 
 function startOfDay(d = new Date()) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/**
+ * 기간 막대 색 — 등급 4단계가 아니라 임박도(U, 0~100)를 그대로 쓴다.
+ * 멀면 옅은 회색, 다가올수록 붉고 진해진다. U는 점수 공식의 그 U라
+ * 리스트 순서와 막대 색이 같은 숫자에서 나온다.
+ */
+function urgencyColor(u: number): string {
+  const pct = Math.round(Math.min(100, Math.max(0, u)));
+  return `color-mix(in oklab, var(--grade-now) ${pct}%, var(--border-strong))`;
 }
 
 function fmtDay(iso: string) {

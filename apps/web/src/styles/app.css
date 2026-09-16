@@ -482,7 +482,7 @@ textarea.txt { resize: vertical; }
   z-index: 1;
 }
 .ghost:hover { opacity: 1; background: color-mix(in oklab, currentColor 18%, transparent); }
-.ghost-label { color: var(--text-dim); }
+.ghost-label { color: var(--text); }
 
 .nav { display: inline-flex; gap: 2px; }
 .nav .ghost-btn { padding-inline: 8px; }
@@ -509,3 +509,9 @@ textarea.txt { resize: vertical; }
 .rail-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--accent); margin-top: var(--sp-3); }
 .shell[data-sidebar='collapsed'] .splitter-x { pointer-events: none; }
 .shell[data-sidebar='collapsed'] .splitter-x::before { background: var(--border); }
+
+.urg-legend { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-faint); white-space: nowrap; }
+.urg-legend i {
+  width: 72px; height: 8px; border-radius: 999px;
+  background: linear-gradient(90deg, var(--border-strong), var(--grade-now));
+}
