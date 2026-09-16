@@ -7,8 +7,17 @@ import { useStore } from '../store';
 import { TaskDetail } from './TaskDetail';
 
 export function TaskList() {
-  const { tasks, view, selectedTagIds, taskTags, tags, selectedTaskId, select, toggleDone } =
-    useStore();
+  const {
+    tasks,
+    view,
+    selectedTagIds,
+    taskTags,
+    tags,
+    selectedTaskId,
+    select,
+    toggleDone,
+    search,
+  } = useStore();
   const detailMode = useLayout((s) => s.detailMode);
   const inline = detailMode === 'inline';
 
@@ -17,6 +26,15 @@ export function TaskList() {
     let list = filterByView(tasks, view, now);
     if (selectedTagIds.length) {
       list = list.filter((t) => (taskTags[t.id] ?? []).some((id) => selectedTagIds.includes(id)));
+    }
+    const q = search.trim().toLowerCase();
+    if (q) {
+      // 검색은 뷰를 무시한다 — "어디 뒀더라"를 찾는 용도라 뷰에 갇히면 못 찾는다
+      list = tasks.filter(
+        (t) =>
+          !t.deleted_at &&
+          (t.title.toLowerCase().includes(q) || (t.notes ?? '').toLowerCase().includes(q)),
+      );
     }
     // 고른 줄은 뷰 조건에서 벗어나도 목록에 남긴다.
     // 상세에서 마감을 고치면 그 줄이 필터 밖으로 나가는데, 그때 편집하던 칸이
@@ -27,7 +45,7 @@ export function TaskList() {
     }
     // 인박스·완료함은 점수 정렬 대상이 아니므로 수동 순서를 유지한다 (2장)
     return view === 'inbox' || view === 'done' ? list : sortByPriority(list, now);
-  }, [tasks, view, selectedTagIds, taskTags, selectedTaskId]);
+  }, [tasks, view, selectedTagIds, taskTags, selectedTaskId, search]);
 
   const inView = useMemo(
     () => new Set(filterByView(tasks, view).map((t) => t.id)),
@@ -35,6 +53,16 @@ export function TaskList() {
   );
 
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);
+  const kidCount = useMemo(() => {
+    const m: Record<string, { n: number; done: number }> = {};
+    for (const t of tasks) {
+      if (!t.parent_id || t.deleted_at) continue;
+      const e = (m[t.parent_id] ??= { n: 0, done: 0 });
+      e.n++;
+      if (t.status === 'done') e.done++;
+    }
+    return m;
+  }, [tasks]);
 
   if (!rows.length) return <p className="empty">여기엔 아무것도 없다.</p>;
 
@@ -48,6 +76,7 @@ export function TaskList() {
               task={t}
               selected={open}
               offView={!inView.has(t.id)}
+              kids={kidCount[t.id]}
               inline={inline}
               open={open}
               tagNames={(taskTags[t.id] ?? []).map((id) => tagById.get(id)).filter(Boolean)}
@@ -77,6 +106,7 @@ function Row({
   task,
   selected,
   offView,
+  kids,
   inline,
   open,
   tagNames,
@@ -86,6 +116,7 @@ function Row({
   task: Task;
   selected: boolean;
   offView: boolean;
+  kids?: { n: number; done: number };
   inline: boolean;
   open: boolean;
   tagNames: (Tag | undefined)[];
@@ -123,6 +154,15 @@ function Row({
           {task.estimate_is_ai && <span className="ai-badge">AI 추정</span>}
           {task.pinned && <span>📌</span>}
           {offView && <span className="offview-badge">이 뷰 밖</span>}
+          {task.parent_id && <span className="hint-inline">↳ 하위</span>}
+          {kids && (
+            <span className="kids">
+              <span className="progress progress-inline">
+                <span className="progress-bar" style={{ width: `${(kids.done / kids.n) * 100}%` }} />
+              </span>
+              {kids.done}/{kids.n}
+            </span>
+          )}
           {tagNames.map(
             (t) =>
               t && (

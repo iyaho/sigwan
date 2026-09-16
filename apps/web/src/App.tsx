@@ -11,7 +11,8 @@ import { useLayout } from './lib/layout';
 import { useStore } from './store';
 
 export default function App() {
-  const { ready, load, setZoom, setOrigin } = useStore();
+  const { ready, load, setZoom, setOrigin, search, setSearch, select } = useStore();
+  const searchRef = useRef<HTMLInputElement>(null);
   const { sidebarPx, listPct, detailMode, set, commit, reset, toggleDetailMode } = useLayout();
   const mainRef = useRef<HTMLElement>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -31,6 +32,14 @@ export default function App() {
         e.preventDefault();
         setAddOpen(true);
       }
+      if (e.key === '/') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (e.key === 'Escape') {
+        setAddOpen(false);
+        select(null);
+      }
       if (e.key.toLowerCase() === 't') {
         const n = new Date();
         setOrigin(new Date(n.getFullYear(), n.getMonth(), n.getDate()));
@@ -38,7 +47,7 @@ export default function App() {
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
-  }, [setZoom, setOrigin]);
+  }, [setZoom, setOrigin, select]);
 
   // 세로 선: 포인터의 clientX가 곧 사이드바 폭이다 (사이드바가 화면 왼쪽 끝에 붙어 있으므로)
   const moveSidebar = useCallback((clientX: number) => set({ sidebarPx: clientX }), [set]);
@@ -92,9 +101,28 @@ export default function App() {
           onReset={() => reset('listPct')}
         />
 
-        <section className="col" style={{ flex: `0 0 ${listPct}%`, height: 'auto' }}>
+        <section
+          className="col list-pane"
+          data-drop="trash"
+          style={{ flex: `0 0 ${listPct}%`, height: 'auto' }}
+        >
           <div className="pane-head">
-            할 일 — 리스트에서 위 타임라인으로 끌어다 놓으면 블록이 생긴다
+            <span className="list-title">할 일</span>
+            <input
+              ref={searchRef}
+              className="txt txt-sm search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setSearch('');
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              placeholder="검색  /"
+              aria-label="검색"
+            />
+            <span className="trash-hint">여기로 막대를 끌면 블록만 지워진다</span>
             <button
               type="button"
               onClick={() => setAddOpen(true)}

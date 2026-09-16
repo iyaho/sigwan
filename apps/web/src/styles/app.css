@@ -381,3 +381,51 @@ textarea.txt { resize: vertical; }
   padding: 0 4px;
   color: var(--text-faint);
 }
+
+/* ── 편집·삭제·진행률 ─────────────────────────────────────────────── */
+.title-edit {
+  font-family: inherit;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  padding: 4px 8px;
+  margin: 0 0 var(--sp-3);
+  border-color: transparent;
+  background: transparent;
+}
+.title-edit:hover { border-color: var(--border); }
+.title-edit:focus { background: var(--bg); }
+.title-edit-sm { font-size: var(--fs-md); margin-bottom: var(--sp-2); }
+
+.blocklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.blocklist li { display: flex; align-items: center; gap: 6px; }
+.mono-sm { font-family: var(--mono); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+
+.progress {
+  display: block;
+  height: 6px;
+  background: var(--bg-sunken);
+  border-radius: 999px;
+  overflow: hidden;
+  width: 160px;
+  margin-bottom: 4px;
+}
+.progress-bar { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width 160ms ease; }
+.progress-inline { display: inline-block; width: 48px; height: 4px; margin: 0 4px 0 0; vertical-align: middle; }
+.kids { display: inline-flex; align-items: center; font-variant-numeric: tabular-nums; }
+.hint-inline { color: var(--text-faint); }
+
+.danger-row { margin-top: var(--sp-5); padding-top: var(--sp-3); border-top: 1px solid var(--border); }
+.danger-btn { background: var(--grade-now); border-color: var(--grade-now); color: #fff; }
+
+/* 검색 + 휴지통 */
+.list-title { font-weight: 600; color: var(--text); }
+.search { width: 150px; min-width: 0; padding: 3px 8px; font-size: var(--fs-xs); }
+.trash-hint { display: none; font-size: var(--fs-xs); color: var(--grade-now); }
+
+.list-pane { transition: box-shadow 120ms ease; }
+.list-pane[data-hover='true'] {
+  box-shadow: inset 0 0 0 2px var(--grade-now);
+  background: color-mix(in oklab, var(--grade-now) 6%, var(--bg));
+}
+.list-pane[data-hover='true'] .trash-hint { display: inline; }
+.block[data-trash='true'] { opacity: 0.35; outline: 2px dashed var(--grade-now); outline-offset: -2px; }

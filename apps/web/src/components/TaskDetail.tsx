@@ -1,6 +1,7 @@
 import type { Task } from '@sigwan/core';
 import { GRADE_COLOR, GRADE_LABEL, priorityScore } from '@sigwan/core';
 import type * as React from 'react';
+import { useEffect, useState } from 'react';
 import { KIND_LABEL, dueFields, dueParts } from '../lib/taskDate';
 import { useStore } from '../store';
 
@@ -11,7 +12,31 @@ import { useStore } from '../store';
  * `compact`는 인라인 모드 — 제목은 이미 위 줄에 있으므로 반복하지 않는다.
  */
 export function TaskDetail({ task, compact = false }: { task: Task; compact?: boolean }) {
-  const { saveTask, blocks, tags, taskTags, setTaskTags } = useStore();
+  const { saveTask, removeTask, removeBlock, blocks, tags, taskTags, setTaskTags, tasks } =
+    useStore();
+  // 제목·메모는 타이핑마다 저장하지 않는다 — 글자마다 Dexie put + rev 증가는 낭비고,
+  // M2 동기화가 붙으면 글자마다 outbox 항목이 된다. blur/Enter에서 한 번.
+  const [title, setTitle] = useState(task.title);
+  const [notes, setNotes] = useState(task.notes ?? '');
+  useEffect(() => {
+    setTitle(task.title);
+    setNotes(task.notes ?? '');
+  }, [task.id, task.title, task.notes]);
+  const [armed, setArmed] = useState(false);
+
+  const commitTitle = () => {
+    const t = title.trim();
+    if (!t) {
+      setTitle(task.title);
+      return;
+    }
+    if (t !== task.title) saveTask({ ...task, title: t });
+  };
+  const commitNotes = () => {
+    const n = notes.trim() || null;
+    if (n !== task.notes) saveTask({ ...task, notes: n });
+  };
+  const kids = tasks.filter((t) => t.parent_id === task.id && !t.deleted_at);
   const s = priorityScore(task);
   const myBlocks = blocks.filter((b) => b.task_id === task.id && !b.deleted_at);
   const { dateStr, timeStr } = dueParts(task);
@@ -23,7 +48,21 @@ export function TaskDetail({ task, compact = false }: { task: Task; compact?: bo
 
   return (
     <div className={compact ? 'detail-body detail-body-compact' : 'detail-body'}>
-      {!compact && <h2>{task.title}</h2>}
+      <input
+        className={compact ? 'txt title-edit title-edit-sm' : 'txt title-edit'}
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onBlur={commitTitle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') {
+            setTitle(task.title);
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        maxLength={500}
+        aria-label="제목"
+      />
 
       <dl className="kv">
         <dt>마감</dt>
@@ -131,7 +170,43 @@ export function TaskDetail({ task, compact = false }: { task: Task; compact?: bo
         </dd>
 
         <dt>블록</dt>
-        <dd>{myBlocks.length ? `${myBlocks.length}개` : '미스케줄'}</dd>
+        <dd>
+          {myBlocks.length ? (
+            <ul className="blocklist">
+              {myBlocks
+                .slice()
+                .sort((a, b) => a.start_at.localeCompare(b.start_at))
+                .map((b) => (
+                  <li key={b.id}>
+                    <span className="mono-sm">{fmtRange(b.start_at, b.end_at)}</span>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      title="이 블록만 지운다 (할 일은 남는다)"
+                      onClick={() => removeBlock(b.id)}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          ) : (
+            <span className="hint">미스케줄 — 리스트에서 타임라인으로 끌어다 놓는다</span>
+          )}
+        </dd>
+        {kids.length > 0 && (
+          <>
+            <dt>하위</dt>
+            <dd>
+              <div className="progress">
+                <div className="progress-bar" style={{ width: `${Math.round(task.progress * 100)}%` }} />
+              </div>
+              <span className="hint">
+                {kids.filter((k) => k.status === 'done').length}/{kids.length} 완료 · 자동 계산
+              </span>
+            </dd>
+          </>
+        )}
         <dt>출처</dt>
         <dd>{task.source}</dd>
       </dl>
@@ -157,21 +232,40 @@ export function TaskDetail({ task, compact = false }: { task: Task; compact?: bo
         </ul>
       </div>
 
-      {task.notes && (
-        <p
-          style={{
-            marginTop: 20,
-            fontSize: 12.5,
-            color: 'var(--text-dim)',
-            whiteSpace: 'pre-wrap',
-          }}
+      <label className="fld" style={{ marginTop: 18 }}>
+        <span className="fld-label">메모</span>
+        <textarea
+          className="txt"
+          rows={3}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          onBlur={commitNotes}
+          placeholder="평문. 마크다운 렌더는 DOMPurify와 같이 붙인다 (10장 7번)"
+        />
+      </label>
+
+      <div className="danger-row">
+        <button
+          type="button"
+          className={armed ? 'ghost-btn danger-btn' : 'ghost-btn'}
+          onClick={() => (armed ? removeTask(task.id) : setArmed(true))}
+          onBlur={() => setArmed(false)}
         >
-          {/* 지금은 평문. 마크다운 렌더를 붙이는 순간 DOMPurify가 필요하다 (10장 7번) */}
-          {task.notes}
-        </p>
-      )}
+          {armed
+            ? `정말 지울까? (${kids.length ? `하위 ${kids.length}개 · ` : ''}블록 ${myBlocks.length}개 함께)`
+            : '할 일 삭제'}
+        </button>
+      </div>
     </div>
   );
+}
+
+function fmtRange(a: string, b: string) {
+  const s = new Date(a);
+  const e = new Date(b);
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  const day = `${s.getMonth() + 1}/${s.getDate()}`;
+  return `${day} ${p2(s.getHours())}:${p2(s.getMinutes())}–${p2(e.getHours())}:${p2(e.getMinutes())}`;
 }
 
 const inputStyle: React.CSSProperties = {

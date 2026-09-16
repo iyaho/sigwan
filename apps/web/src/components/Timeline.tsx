@@ -54,8 +54,17 @@ interface DragState {
 }
 
 export function Timeline() {
-  const { zoom, origin, blocks, tasks, snapDisabled, saveBlock, scheduleTask, revealTask } =
-    useStore();
+  const {
+    zoom,
+    origin,
+    blocks,
+    tasks,
+    snapDisabled,
+    saveBlock,
+    removeBlock,
+    scheduleTask,
+    revealTask,
+  } = useStore();
   const spec = ZOOMS[zoom];
   const vertical = spec.vertical;
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -132,8 +141,28 @@ export function Timeline() {
     });
   }
 
+  /**
+   * 3.2 — "막대 → 인박스 = Block 삭제 (Task 유지)".
+   * 아래 할 일 리스트 영역이 휴지통이다. 위에 있는 동안 리스트가 빨갛게 표시된다.
+   */
+  function overTrash(e: { clientX: number; clientY: number }): HTMLElement | null {
+    const el = document.querySelector<HTMLElement>('[data-drop="trash"]');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const inside =
+      e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    return inside ? el : null;
+  }
+
   function onPointerMove(e: React.PointerEvent) {
     if (!drag) return;
+    if (drag.mode === 'move') {
+      const trash = document.querySelector<HTMLElement>('[data-drop="trash"]');
+      const hit = overTrash(e);
+      if (trash) trash.dataset.hover = hit ? 'true' : 'false';
+      const el0 = elRef.current[drag.id];
+      if (el0) el0.dataset.trash = hit ? 'true' : 'false';
+    }
     const el = elRef.current[drag.id];
     if (!el) return;
     const delta = (vertical ? e.clientY : e.clientX) - drag.startPx;
@@ -160,8 +189,12 @@ export function Timeline() {
     const deltaMin = delta / spec.pxPerMinute;
     const b = blocks.find((x) => x.id === drag.id);
     const wasMoved = moved.current;
+    const dropOnTrash = drag.mode === 'move' && wasMoved && !!overTrash(e);
     setDrag(null);
     moved.current = false;
+    const trashEl = document.querySelector<HTMLElement>('[data-drop="trash"]');
+    if (trashEl) trashEl.dataset.hover = 'false';
+    if (el) el.dataset.trash = 'false';
     if (el) {
       // transform은 React가 안 쓰는 속성이라 지워도 되지만, height/width는 React 것이다.
       el.style.transform = '';
@@ -170,6 +203,12 @@ export function Timeline() {
     }
     // 클릭은 선택만 한다. 여기서 저장하면 스냅이 걸려 시각이 최대 ±7.5분 조용히 움직인다.
     if (!b || !wasMoved) return;
+
+    if (dropOnTrash) {
+      await removeBlock(b.id); // 툼스톤. Task는 그대로 남아 리스트에 '미스케줄'로 돌아간다
+      force((n) => n + 1);
+      return;
+    }
 
     if (drag.mode === 'move') {
       const start = snap(new Date(drag.origStart + deltaMin * 60_000), zoom, !snapDisabled);

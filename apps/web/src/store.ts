@@ -1,5 +1,5 @@
 import type { Block, Tag, Task, ZoomLevel } from '@sigwan/core';
-import { newId } from '@sigwan/core';
+import { newId, parentUpdate, progressOf } from '@sigwan/core';
 import { useLayout } from './lib/layout';
 import { type ViewKey, filterByView, viewThatShows } from './lib/views';
 import { create } from 'zustand';
@@ -33,6 +33,11 @@ interface State {
 
   saveTask: (t: Task) => Promise<void>;
   toggleDone: (id: string) => Promise<void>;
+  /** 툼스톤. 하위작업도 같이 지운다 — 부모 없는 자식은 화면에서 갈 곳이 없다 */
+  removeTask: (id: string) => Promise<void>;
+  /** `/` 검색 (12장). 제목·메모 부분 일치 */
+  search: string;
+  setSearch: (q: string) => void;
   saveBlock: (b: Block) => Promise<void>;
   removeBlock: (id: string) => Promise<void>;
   /** 인박스 Task를 타임라인에 떨어뜨림 → Block 생성 (3.2) */
@@ -73,6 +78,7 @@ export const useStore = create<State>((set, get) => ({
   taskTags: {},
 
   view: 'today',
+  search: '',
   selectedTagIds: [],
   selectedTaskId: null,
   zoom: 'day',
@@ -104,6 +110,7 @@ export const useStore = create<State>((set, get) => ({
         : [...s.selectedTagIds, id],
     })),
   select: (selectedTaskId) => set({ selectedTaskId }),
+  setSearch: (search) => set({ search }),
   setZoom: (zoom) => set({ zoom }),
   setOrigin: (origin) => set({ origin }),
   setSnapDisabled: (snapDisabled) => set({ snapDisabled }),
@@ -117,12 +124,41 @@ export const useStore = create<State>((set, get) => ({
     const t = get().tasks.find((x) => x.id === id);
     if (!t) return;
     const done = t.status !== 'done';
-    await get().saveTask({
+    const next = {
       ...t,
       status: done ? 'done' : 'todo',
       completed_at: done ? new Date().toISOString() : null,
-      progress: done ? 1 : 0,
-    });
+    } as Task;
+    // 자식이 있는 할 일의 progress는 자식이 정한다 (3.6). 없으면 자기 status.
+    next.progress = progressOf(next, get().tasks);
+    await get().saveTask(next);
+    // 부모가 있으면 부모 progress를 따라 올린다
+    const pu = parentUpdate(next, get().tasks);
+    if (pu) await get().saveTask(pu);
+  },
+
+  async removeTask(id) {
+    const st = get();
+    const kids = st.tasks.filter((t) => t.parent_id === id && !t.deleted_at);
+    for (const k of [...kids, ...st.tasks.filter((t) => t.id === id)]) {
+      await repos.tasks.remove(k.id);
+    }
+    // 이 할 일에 붙은 블록도 같이 툼스톤 — Task 없는 Block은 '순수 일정'으로 오해된다
+    const gone = new Set([id, ...kids.map((k) => k.id)]);
+    for (const b of st.blocks.filter((b) => b.task_id && gone.has(b.task_id))) {
+      await repos.blocks.remove(b.id);
+    }
+    set((s) => ({
+      tasks: s.tasks.filter((t) => !gone.has(t.id)),
+      blocks: s.blocks.filter((b) => !(b.task_id && gone.has(b.task_id))),
+      selectedTaskId: s.selectedTaskId && gone.has(s.selectedTaskId) ? null : s.selectedTaskId,
+    }));
+    // 부모가 있었으면 부모 progress 재계산
+    const removed = st.tasks.find((t) => t.id === id);
+    if (removed?.parent_id) {
+      const parent = get().tasks.find((t) => t.id === removed.parent_id);
+      if (parent) await get().saveTask({ ...parent, progress: progressOf(parent, get().tasks) });
+    }
   },
 
   async saveBlock(b) {
