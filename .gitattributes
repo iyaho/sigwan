@@ -1,0 +1,19 @@
+# 맥·윈도우가 섞인 팀이라 저장소에는 항상 LF로 넣는다.
+# 이게 없으면 윈도우 쪽 커밋에서 파일 전체가 줄바꿈만 바뀐 걸로 잡혀 diff가 통째로 빨개진다.
+* text=auto eol=lf
+
+# 윈도우에서만 돌아가는 스크립트는 CRLF여야 한다.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# 바이너리는 손대지 않는다.
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.ttf  binary
+*.otf  binary
+*.woff binary
+*.woff2 binary
+*.keystore binary
+*.jar  binary
