@@ -1,5 +1,21 @@
-import type { Block, BlockRange, BlockRepo, Repos, Tag, TagRepo, Task, TaskFilter, TaskRepo } from '@sigwan/core';
-import { nowIso } from '@sigwan/core';
+import type {
+  Block,
+  BlockRange,
+  BlockRepo,
+  Repos,
+  Routine,
+  RoutineCheck,
+  RoutineCheckRepo,
+  RoutineRepo,
+  Settings,
+  SettingsRepo,
+  Tag,
+  TagRepo,
+  Task,
+  TaskFilter,
+  TaskRepo,
+} from '@sigwan/core';
+import { checkKey, nowIso } from '@sigwan/core';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { getDb, withWrite } from './sqlite';
 
@@ -72,6 +88,42 @@ function rowToTag(r: Row): Tag {
     name: r.name as string,
     color: r.color as string,
     sort_order: r.sort_order as number,
+    deleted_at: (r.deleted_at as string | null) ?? null,
+    rev: r.rev as number,
+  };
+}
+
+/** weekdays는 '0,2' 문자열로 넣는다. SQLite에 배열 타입이 없고, 어차피 통째로 읽고 쓴다 */
+const toWeekdays = (v: unknown): number[] =>
+  String(v ?? '')
+    .split(',')
+    .filter((x) => x !== '')
+    .map(Number);
+const fromWeekdays = (w: number[]) => [...w].sort((a, b) => a - b).join(',');
+
+function rowToRoutine(r: Row): Routine {
+  return {
+    id: r.id as string,
+    user_id: r.user_id as string,
+    name: r.name as string,
+    weekdays: toWeekdays(r.weekdays),
+    start_min: r.start_min as number,
+    end_min: r.end_min as number,
+    color: r.color as string,
+    active_from: (r.active_from as string | null) ?? null,
+    active_to: (r.active_to as string | null) ?? null,
+    deleted_at: (r.deleted_at as string | null) ?? null,
+    rev: r.rev as number,
+  };
+}
+
+function rowToCheck(r: Row): RoutineCheck {
+  return {
+    id: r.id as string,
+    user_id: r.user_id as string,
+    routine_id: r.routine_id as string,
+    day: r.day as string,
+    checked_at: r.checked_at as string,
     deleted_at: (r.deleted_at as string | null) ?? null,
     rev: r.rev as number,
   };
@@ -212,6 +264,11 @@ class SqliteTagRepo implements TagRepo {
     const rows = await db.getAllAsync<Row>('SELECT * FROM tags WHERE user_id = ? AND deleted_at IS NULL ORDER BY sort_order', USER_ID);
     return rows.map(rowToTag);
   }
+  async findByName(name: string) {
+    const db = await getDb();
+    const r = await db.getFirstAsync<Row>('SELECT * FROM tags WHERE user_id = ? AND name = ?', USER_ID, name);
+    return r ? rowToTag(r) : null;
+  }
   async upsert(tag: Tag) {
     const db = await getDb();
     const next: Tag = { ...tag, user_id: USER_ID, rev: tag.rev + 1 };
@@ -256,13 +313,103 @@ class SqliteTagRepo implements TagRepo {
   }
 }
 
-/**
- * 앱은 아직 3.8(고정 일정·수면·체크) 저장소를 구현하지 않았다 — 화면도 없다.
- * 그래서 Repos 전체가 아니라 가진 것만 declare한다. 웹과 나란히 맞추는 날
- * 이 Pick을 Repos로 되돌리면, 빠뜨린 저장소를 컴파일러가 이름까지 대며 잡아준다.
- */
-export const repos: Pick<Repos, 'tasks' | 'blocks' | 'tags'> & { tags: SqliteTagRepo } = {
+/** 3.8 고정 일정 — 규칙으로 저장한다. 펼치는 것은 core/routineOccurrences가 한다 */
+class SqliteRoutineRepo implements RoutineRepo {
+  async list() {
+    const db = await getDb();
+    const rows = await db.getAllAsync<Row>(
+      'SELECT * FROM routines WHERE user_id = ? AND deleted_at IS NULL ORDER BY start_min, name',
+      USER_ID,
+    );
+    return rows.map(rowToRoutine);
+  }
+  async upsert(r: Routine) {
+    const next: Routine = { ...r, user_id: USER_ID, rev: r.rev + 1 };
+    await withWrite(async (db) => {
+      await db.runAsync(
+        `INSERT OR REPLACE INTO routines (id,user_id,name,weekdays,start_min,end_min,color,active_from,active_to,deleted_at,rev)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        next.id, next.user_id, next.name, fromWeekdays(next.weekdays), next.start_min, next.end_min,
+        next.color, next.active_from, next.active_to, next.deleted_at, next.rev,
+      );
+      await outbox(db, 'routines', next.id, 'upsert', next);
+    });
+    return next;
+  }
+  async remove(id: string) {
+    const db = await getDb();
+    const r = await db.getFirstAsync<Row>('SELECT * FROM routines WHERE id = ?', id);
+    if (!r) return;
+    // 툼스톤. 지운 수업이 지난 주 화면에서까지 사라지면 기록이 틀어진다 (7장)
+    await this.upsert({ ...rowToRoutine(r), deleted_at: nowIso() });
+  }
+}
+
+/** 3.8.4 체크 — id가 계산값이라 토글이 멱등이다 (명세 5.1) */
+class SqliteRoutineCheckRepo implements RoutineCheckRepo {
+  async listRange(from: string, to: string) {
+    const db = await getDb();
+    const rows = await db.getAllAsync<Row>(
+      'SELECT * FROM routine_checks WHERE user_id = ? AND day BETWEEN ? AND ? AND deleted_at IS NULL',
+      USER_ID, from, to,
+    );
+    return rows.map(rowToCheck);
+  }
+  async toggle(routineId: string, day: string) {
+    const db = await getDb();
+    const id = checkKey(routineId, day);
+    const cur = await db.getFirstAsync<Row>('SELECT * FROM routine_checks WHERE id = ?', id);
+    const prev = cur ? rowToCheck(cur) : null;
+    const next: RoutineCheck = prev
+      ? { ...prev, checked_at: nowIso(), deleted_at: prev.deleted_at ? null : nowIso(), rev: prev.rev + 1 }
+      : { id, user_id: USER_ID, routine_id: routineId, day, checked_at: nowIso(), deleted_at: null, rev: 0 };
+    await withWrite(async (tx) => {
+      await tx.runAsync(
+        'INSERT OR REPLACE INTO routine_checks (id,user_id,routine_id,day,checked_at,deleted_at,rev) VALUES (?,?,?,?,?,?,?)',
+        next.id, next.user_id, next.routine_id, next.day, next.checked_at, next.deleted_at, next.rev,
+      );
+      await outbox(tx, 'routine_checks', next.id, 'upsert', next);
+    });
+    return next;
+  }
+}
+
+/** 사용자당 한 행. 없으면 null — 부르는 쪽이 DEFAULT_SLEEP으로 시작한다 */
+class SqliteSettingsRepo implements SettingsRepo {
+  async get() {
+    const db = await getDb();
+    const r = await db.getFirstAsync<Row>('SELECT * FROM settings WHERE user_id = ?', USER_ID);
+    if (!r) return null;
+    return {
+      user_id: r.user_id as string,
+      sleep: JSON.parse(r.sleep as string) as Settings['sleep'],
+      weight_urgent: r.weight_urgent as number,
+      half_life_hours: r.half_life_hours as number,
+      gap_min: r.gap_min as number,
+      updated_at: r.updated_at as string,
+      rev: r.rev as number,
+    };
+  }
+  async save(st: Settings) {
+    const next: Settings = { ...st, user_id: USER_ID, updated_at: nowIso(), rev: st.rev + 1 };
+    await withWrite(async (db) => {
+      await db.runAsync(
+        `INSERT OR REPLACE INTO settings (user_id,sleep,weight_urgent,half_life_hours,gap_min,updated_at,rev)
+         VALUES (?,?,?,?,?,?,?)`,
+        next.user_id, JSON.stringify(next.sleep), next.weight_urgent, next.half_life_hours,
+        next.gap_min, next.updated_at, next.rev,
+      );
+      await outbox(db, 'settings', next.user_id, 'upsert', next);
+    });
+    return next;
+  }
+}
+
+export const repos: Repos & { tags: SqliteTagRepo } = {
   tasks: new SqliteTaskRepo(),
   blocks: new SqliteBlockRepo(),
   tags: new SqliteTagRepo(),
+  routines: new SqliteRoutineRepo(),
+  routineChecks: new SqliteRoutineCheckRepo(),
+  settings: new SqliteSettingsRepo(),
 };

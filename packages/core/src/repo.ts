@@ -50,6 +50,12 @@ export interface BlockRepo {
 
 export interface TagRepo {
   list(): Promise<Tag[]>;
+  /**
+   * 이름으로 찾는다 — **툼스톤된 것까지** 본다.
+   * 삭제가 논리 삭제라 지운 태그가 UNIQUE(user_id, name)을 계속 붙들고 있다.
+   * 이걸 모르면 "지웠던 이름을 다시 만들면 DB가 막는" 상태가 된다.
+   */
+  findByName(name: string): Promise<Tag | null>;
   upsert(tag: Tag): Promise<Tag>;
   remove(id: string): Promise<void>;
   setTaskTags(taskId: string, tagIds: string[]): Promise<void>;

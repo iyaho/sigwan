@@ -1,8 +1,9 @@
-import { addDays, rangeProgress, startOfDay, startOfWeek, ZOOMS } from '@sigwan/core';
+import { addDays, checkKey, rangeProgress, routineOccurrences, startOfDay, startOfWeek, ymd, ZOOMS } from '@sigwan/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddTaskSheet } from '@/components/AddTaskSheet';
+import { AutoScheduleSheet } from '@/components/AutoScheduleSheet';
 import { DayTimeline } from '@/components/DayTimeline';
 import { Fab } from '@/components/Fab';
 import { DayAgenda } from '@/components/DayAgenda';
@@ -23,7 +24,7 @@ import { radius, sp, useTheme } from '@/theme';
 export default function TimelineScreen() {
   const th = useTheme();
   const insets = useSafeAreaInsets();
-  const { blocks, tasks } = useStore();
+  const { blocks, tasks, routines, routineChecks, proposals, propose } = useStore();
   const [day, setDay] = useState(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -32,6 +33,7 @@ export default function TimelineScreen() {
   const [mode, setMode] = useState<'day' | 'week'>('day');
   const [addOpen, setAddOpen] = useState(false);
   const [slotAt, setSlotAt] = useState<Date | null>(null);
+  const [autoOpen, setAutoOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const [now, setNow] = useState(() => new Date());
 
@@ -66,6 +68,16 @@ export default function TimelineScreen() {
   }, [day, mode]);
   const prog = useMemo(() => rangeProgress(tasks, range.start, range.end), [tasks, range]);
   const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : null;
+
+  /**
+   * 고정 일정은 Task가 아니다 — 점수·등급·위 진행률에 넣지 않는다 (3.8.4).
+   * 지나간 것만 분모에 넣는다. 아직 오지 않은 수업을 "안 했다"고 셀 이유가 없다.
+   */
+  const fixed = useMemo(() => {
+    const today = ymd(new Date());
+    const occ = routineOccurrences(routines, range.start, range.end).filter((o) => o.day <= today);
+    return { done: occ.filter((o) => routineChecks[checkKey(o.routine.id, o.day)]).length, total: occ.length };
+  }, [routines, routineChecks, range]);
 
   // 주 모드에서는 한 주씩 넘긴다
   const shift = (n: number) => setDay(addDays(day, mode === 'week' ? n * 7 : n));
@@ -103,8 +115,22 @@ export default function TimelineScreen() {
             {mode === 'week'
               ? `이번 주 마감 ${prog.total}개${pct !== null ? ` · ${pct}% 완료` : ''}`
               : `블록 ${dayBlocks.length}개 · ${Math.round((planned / 60) * 10) / 10}시간 잡힘${pct !== null ? ` · 마감 ${pct}%` : ''}`}
+            {fixed.total > 0 ? `  ·  고정 ${fixed.done}/${fixed.total}` : ''}
           </Text>
         </View>
+
+        {/* 3.8 — 이 앱에서 가장 특징적인 기능이라 눈에 띄는 자리에 둔다 */}
+        <Pressable
+          onPress={() => {
+            if (!proposals.length) propose();
+            setAutoOpen(true);
+          }}
+          style={[styles.autoBtn, { borderColor: th.accent, backgroundColor: proposals.length ? th.accent : th.accentSoft }]}
+        >
+          <Text style={{ fontSize: 12, fontWeight: '700', color: proposals.length ? '#fff' : th.accent }}>
+            {proposals.length ? `제안 ${proposals.length}` : '⚡'}
+          </Text>
+        </Pressable>
 
         <View style={[styles.seg, { borderColor: th.border }]}>
           {(['day', 'week'] as const).map((m) => (
@@ -152,6 +178,7 @@ export default function TimelineScreen() {
       <Fab onPress={() => setAddOpen(true)} />
       <AddTaskSheet open={addOpen} onClose={() => setAddOpen(false)} />
       <SlotPickerSheet at={slotAt} onClose={() => setSlotAt(null)} />
+      <AutoScheduleSheet open={autoOpen} onClose={() => setAutoOpen(false)} />
       <TaskDetailSheet />
     </View>
   );
@@ -162,6 +189,7 @@ const styles = StyleSheet.create({
   nav: { flexDirection: 'row', gap: 4 },
   navBtn: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 6 },
   seg: { flexDirection: 'row', borderWidth: 1, borderRadius: radius.md, overflow: 'hidden' },
+  autoBtn: { borderWidth: 1, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 6 },
   segBtn: { paddingHorizontal: 12, paddingVertical: 6 },
   h1: { fontSize: 20, fontWeight: '700', letterSpacing: -0.2 },
   nowLine: { position: 'absolute', left: 0, right: 0, borderTopWidth: 2, zIndex: 20 },

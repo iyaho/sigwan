@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TIME_CHIPS, fmtEst, fmtYmd, shiftYmd } from '../dateChips';
 import { useStore } from '../store';
 import { radius, sp, useTheme } from '../theme';
+import { MonthPicker } from './MonthPicker';
 import { Chip, Field, Row, Sheet } from './Sheet';
 
 /** 선택된 할 일의 상세 — 웹 TaskDetail과 같은 것들을 손댈 수 있어야 한다 */
@@ -15,9 +16,11 @@ export function TaskDetailSheet() {
 
   const [title, setTitle] = useState('');
   const [armed, setArmed] = useState(false);
+  const [cal, setCal] = useState(false);
   useEffect(() => {
     if (task) setTitle(task.title);
     setArmed(false);
+    setCal(false);
   }, [task]);
 
   if (!task) return null;
@@ -62,7 +65,19 @@ export function TaskDetailSheet() {
               <Pressable onPress={() => setDue(shiftYmd(dateStr, -1), timeStr)} style={[styles.step, { borderColor: th.borderStrong }]}>
                 <Text style={{ color: th.textDim }}>◀</Text>
               </Pressable>
-              <Text style={{ color: th.text, fontSize: 13, minWidth: 110, textAlign: 'center' }}>{fmtYmd(dateStr)}</Text>
+              <Pressable onPress={() => setCal((v) => !v)} hitSlop={6}>
+                <Text
+                  style={{
+                    color: th.text,
+                    fontSize: 13,
+                    minWidth: 150,
+                    textAlign: 'center',
+                    textDecorationLine: 'underline',
+                  }}
+                >
+                  {fmtYmd(dateStr)}
+                </Text>
+              </Pressable>
               <Pressable onPress={() => setDue(shiftYmd(dateStr, 1), timeStr)} style={[styles.step, { borderColor: th.borderStrong }]}>
                 <Text style={{ color: th.textDim }}>▶</Text>
               </Pressable>
@@ -70,6 +85,16 @@ export function TaskDetailSheet() {
                 <Text style={{ color: th.textDim, fontSize: 12 }}>지우기</Text>
               </Pressable>
             </Row>
+            {/* 날짜를 누르면 달력. ◀▶만으로는 다음 달 이후로 못 간다 */}
+            {cal && (
+              <MonthPicker
+                value={dateStr}
+                onPick={(day) => {
+                  setDue(day, timeStr);
+                  setCal(false);
+                }}
+              />
+            )}
             <Row>
               {TIME_CHIPS.map((t) => (
                 <Chip key={t || 'none'} small label={t || '종일'} on={timeStr === t} onPress={() => setDue(dateStr, t)} />
@@ -77,10 +102,22 @@ export function TaskDetailSheet() {
             </Row>
           </View>
         ) : (
-          <Row>
-            <Chip label="오늘로" on={false} onPress={() => setDue(todayYmd(), '')} />
-            <Chip label="내일로" on={false} onPress={() => setDue(shiftYmd(todayYmd(), 1), '')} />
-          </Row>
+          <View style={{ gap: 6 }}>
+            <Row>
+              <Chip label="오늘로" on={false} onPress={() => setDue(todayYmd(), '')} />
+              <Chip label="내일로" on={false} onPress={() => setDue(shiftYmd(todayYmd(), 1), '')} />
+              <Chip label="달력" on={cal} onPress={() => setCal((v) => !v)} />
+            </Row>
+            {cal && (
+              <MonthPicker
+                value={null}
+                onPick={(day) => {
+                  setDue(day, '');
+                  setCal(false);
+                }}
+              />
+            )}
+          </View>
         )}
       </Field>
 

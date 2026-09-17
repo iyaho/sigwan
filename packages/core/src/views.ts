@@ -9,7 +9,15 @@ import type { Block, Task } from './types';
  * 이라고 주석까지 달려 있었다 — 명세 11.1이 최대 리스크로 지목한 그 상태라 core로 올렸다.
  */
 
-export type ViewKey = 'today' | 'next7' | 'inbox' | 'done' | 'all';
+export type ViewKey = 'today' | 'next7' | 'month' | 'inbox' | 'done' | 'all';
+
+/**
+ * 「월」은 달력상 이번 달이 아니라 **앞으로 30일**이다.
+ *
+ * next7이 "앞으로 7일"이라 결이 맞고, 무엇보다 달력 기준으로 잡으면 월말에 목록이 텅 비었다가
+ * 1일 아침에 갑자기 서른 개가 된다. 달력 화면(3.1)은 달 경계가 맞지만 이건 목록이라 아니다.
+ */
+export const MONTH_DAYS = 30;
 
 /** 로컬 날짜 문자열. 달력 쪽 ymd와 같은 값이다 — 이름만 문맥에 맞춰 둘 뿐이다. */
 export const localDate = (d: Date = new Date()) => ymd(d);
@@ -32,6 +40,13 @@ export function filterByView(tasks: Task[], view: ViewKey, now = new Date()): Ta
       return live.filter(
         (t) =>
           t.status !== 'done' && !!t.due_at && Date.parse(t.due_at) <= now.getTime() + 7 * 864e5,
+      );
+    case 'month':
+      return live.filter(
+        (t) =>
+          t.status !== 'done' &&
+          !!t.due_at &&
+          Date.parse(t.due_at) <= now.getTime() + MONTH_DAYS * 864e5,
       );
     case 'inbox':
       return live.filter((t) => t.kind === 'someday' && t.status !== 'done');
@@ -73,6 +88,11 @@ export function viewProgress(
     case 'next7':
       pool = live.filter(
         (t) => !!t.due_at && Date.parse(t.due_at) <= now.getTime() + 7 * 864e5,
+      );
+      break;
+    case 'month':
+      pool = live.filter(
+        (t) => !!t.due_at && Date.parse(t.due_at) <= now.getTime() + MONTH_DAYS * 864e5,
       );
       break;
     case 'all':
@@ -134,4 +154,62 @@ export function rangeProgress(
 ): { done: number; total: number } {
   const pool = tasksInRange(tasks, from, to);
   return { done: pool.filter((x) => x.status === 'done').length, total: pool.length };
+}
+
+/**
+ * 완료함을 완료한 **날짜별로** 묶는다.
+ *
+ * 하나의 긴 목록이면 어제 끝낸 것과 석 달 전 것이 같은 무게로 섞여서, 쌓일수록 못 쓰게 된다.
+ * 날짜로 끊으면 "언제 끝냈나"가 목록의 구조 자체가 된다.
+ *
+ * 개수를 자르지 않는다 — 화면이 SectionList로 보이는 것만 그리고, 옛것은 검색으로 찾는다.
+ * completed_at이 없는 옛 데이터는 버리지 않고 맨 아래 「날짜 없음」으로 모은다.
+ */
+export interface CompletedGroup {
+  /** YYYY-MM-DD, 날짜를 모르면 '' */
+  day: string;
+  label: string;
+  tasks: Task[];
+}
+
+export function completedGroups(tasks: Task[], now = new Date()): CompletedGroup[] {
+  const done = tasks.filter((t) => !t.deleted_at && t.status === 'done');
+  const byDay = new Map<string, Task[]>();
+  for (const t of done) {
+    // 로컬 날짜로 끊는다. UTC로 자르면 자정 근처에 끝낸 것이 어제로 밀린다 (7장)
+    const key = t.completed_at ? localDate(new Date(t.completed_at)) : '';
+    const arr = byDay.get(key);
+    if (arr) arr.push(t);
+    else byDay.set(key, [t]);
+  }
+
+  const today = localDate(now);
+  const yesterday = localDate(new Date(now.getTime() - DAY_MS));
+
+  return [...byDay.entries()]
+    .sort((a, b) => (a[0] === '' ? 1 : b[0] === '' ? -1 : b[0].localeCompare(a[0])))
+    .map(([day, list]) => ({
+      day,
+      label: day === '' ? '날짜 없음' : day === today ? '오늘' : day === yesterday ? '어제' : dayLabel(day),
+      // 그룹 안은 늦게 끝낸 것부터
+      tasks: list.sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? '')),
+    }));
+}
+
+const WEEKDAY_LABEL = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** '2026-09-15' → '9월 15일 (월)'. Date로 파싱할 때 T00:00:00을 붙여야 로컬로 읽힌다 */
+function dayLabel(day: string): string {
+  const d = new Date(`${day}T00:00:00`);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAY_LABEL[d.getDay()]})`;
+}
+
+/**
+ * 검색 규칙 — 제목·메모 부분 일치, 대소문자 무시.
+ * 웹과 앱이 각각 구현하면 "웹에서는 찾히는데 폰에서는 안 찾히는" 상태가 된다.
+ */
+export function matchesQuery(t: Task, q: string): boolean {
+  const s = q.trim().toLowerCase();
+  if (!s) return true;
+  return t.title.toLowerCase().includes(s) || (t.notes ?? '').toLowerCase().includes(s);
 }

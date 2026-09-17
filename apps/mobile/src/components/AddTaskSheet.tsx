@@ -9,11 +9,12 @@ import {
   priorityScore,
   sortByPriority,
 } from '@sigwan/core';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { DATE_CHIPS, EST_CHIPS, TIME_CHIPS, fmtEst, fmtYmd, shiftYmd } from '../dateChips';
+import { DATE_CHIPS, EST_CHIPS, TIME_CHIPS, fmtEst, fmtYmd, shiftYmd, ymd } from '../dateChips';
 import { useStore } from '../store';
 import { radius, sp, useTheme } from '../theme';
+import { MonthPicker } from './MonthPicker';
 import { Chip, Field, Row, Sheet } from './Sheet';
 
 /**
@@ -26,23 +27,55 @@ import { Chip, Field, Row, Sheet } from './Sheet';
  *  4. 저장 전에 등급·순위를 보여준다
  *  5. 중요도는 접지 않는다
  */
-export function AddTaskSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AddTaskSheet({
+  open,
+  onClose,
+  defaultTagIds,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /**
+   * 목록에서 태그 필터를 걸어둔 채 추가하면 그 태그를 미리 골라둔다.
+   * 「#학교만 보면서 학교 일을 넣는 중」이 압도적으로 흔한 경우인데,
+   * 매번 같은 칩을 다시 누르게 하는 건 사람이 할 일이 아니다.
+   */
+  defaultTagIds?: string[];
+}) {
   const th = useTheme();
   const { addTask, tags, tasks, select } = useStore();
 
   const [title, setTitle] = useState('');
-  const [preset, setPreset] = useState('없음');
-  const [dateStr, setDateStr] = useState<string | null>(null);
+  /**
+   * 기본은 「오늘」이다. 「없음」이면 kind가 someday가 되어 인박스로만 쌓이고,
+   * 정작 오늘 목록은 비어 있게 된다 (2장 — someday는 정렬에서 빠진다).
+   * 날짜를 안 정하고 싶으면 칩에서 「없음」을 누르면 된다.
+   */
+  const [preset, setPreset] = useState('오늘');
+  const [dateStr, setDateStr] = useState<string | null>(ymd(new Date()));
   const [timeStr, setTimeStr] = useState('');
   const [estMin, setEstMin] = useState(60);
   const [estDirect, setEstDirect] = useState(false);
   const [estText, setEstText] = useState('60');
   const [importance, setImportance] = useState(3);
-  const [tagIds, setTagIds] = useState<string[]>([]);
+  const [tagIds, setTagIds] = useState<string[]>(defaultTagIds ?? []);
   const [more, setMore] = useState(false);
+  const [cal, setCal] = useState(false);
   const [notes, setNotes] = useState('');
   const [scheduleNow, setScheduleNow] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  /**
+   * 열 때마다 새 폼으로 시작한다.
+   *
+   * Sheet는 Modal이라 닫아도 컴포넌트가 살아 있다. 그래서 저장하지 않고 「닫기」로 나가면
+   * 지난번에 고른 것이 그대로 남아 있었다 — 달력을 한 번 쓰면 다음에 열 때도 달력이 켜져 있었다.
+   * 태그는 그때의 필터를 따라간다.
+   */
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpen.current) reset();
+    wasOpen.current = open;
+  });
 
   const commitEst = () => {
     const v = clampEstimate(Number(estText) || estMin);
@@ -80,13 +113,14 @@ export function AddTaskSheet({ open, onClose }: { open: boolean; onClose: () => 
 
   function reset() {
     setTitle('');
-    setPreset('없음');
-    setDateStr(null);
+    setPreset('오늘');
+    setDateStr(ymd(new Date()));
     setTimeStr('');
     setEstMin(60);
     setImportance(3);
-    setTagIds([]);
+    setTagIds(defaultTagIds ?? []);
     setMore(false);
+    setCal(false);
     setNotes('');
     setScheduleNow(false);
   }
@@ -128,8 +162,9 @@ export function AddTaskSheet({ open, onClose }: { open: boolean; onClose: () => 
             <Chip
               key={c.label}
               label={c.label}
-              on={preset === c.label}
+              on={preset === c.label && !cal}
               onPress={() => {
+                setCal(false);
                 setPreset(c.label);
                 const v = c.get();
                 setDateStr(v);
@@ -137,14 +172,37 @@ export function AddTaskSheet({ open, onClose }: { open: boolean; onClose: () => 
               }}
             />
           ))}
+          {/* 다음 달 이후는 칩으로 못 간다. ◀▶로 서른 번 누르게 할 수는 없다 */}
+          <Chip label="달력" on={cal} onPress={() => setCal((v) => !v)} />
         </Row>
+
+        {cal && (
+          <MonthPicker
+            value={dateStr}
+            onPick={(day) => {
+              setDateStr(day);
+              setPreset('달력');
+              setCal(false);
+            }}
+          />
+        )}
         {dateStr && (
           <View style={{ gap: 6, marginTop: 4 }}>
             <Row>
               <Stepper th={th} onPress={() => setDateStr(shiftYmd(dateStr, -1))} label="◀" />
-              <Text style={{ color: th.text, fontSize: 13, minWidth: 110, textAlign: 'center' }}>
-                {fmtYmd(dateStr)}
-              </Text>
+              <Pressable onPress={() => setCal((v) => !v)} hitSlop={6}>
+                <Text
+                  style={{
+                    color: th.text,
+                    fontSize: 13,
+                    minWidth: 150,
+                    textAlign: 'center',
+                    textDecorationLine: 'underline',
+                  }}
+                >
+                  {fmtYmd(dateStr)}
+                </Text>
+              </Pressable>
               <Stepper th={th} onPress={() => setDateStr(shiftYmd(dateStr, 1))} label="▶" />
             </Row>
             <Row>

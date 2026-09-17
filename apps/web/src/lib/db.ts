@@ -179,6 +179,11 @@ class LocalTagRepo implements TagRepo {
   async list() {
     return (await db.tags.toArray()).filter((t) => !t.deleted_at).sort((a, b) => a.sort_order - b.sort_order);
   }
+  /** 툼스톤된 것까지 본다 — 앱 SQLite의 UNIQUE(user_id, name)와 같은 규칙을 지킨다 */
+  async findByName(name: string) {
+    const rows = await db.tags.where('name').equals(name).toArray();
+    return rows[0] ?? null;
+  }
   async upsert(tag: Tag) {
     const next = { ...tag, user_id: USER_ID, rev: tag.rev + 1 };
     await db.tags.put(next);

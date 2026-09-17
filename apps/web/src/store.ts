@@ -380,8 +380,26 @@ export const useStore = create<State>((set, get) => ({
   async addTag(name, color) {
     const clean = name.trim();
     if (!clean) return null;
-    // UNIQUE(user_id, name) — 5장. 로컬에서도 같은 규칙을 지킨다.
-    if (get().tags.some((t) => t.name === clean && !t.deleted_at)) return null;
+    // UNIQUE(user_id, name) — 5장
+    if (get().tags.some((x) => x.name === clean && !x.deleted_at)) return null;
+
+    /**
+     * 삭제가 툼스톤이라(7장) 지운 태그의 행이 그 이름을 계속 붙들고 있다.
+     * 같은 이름으로 새 행을 넣으면 SQLite의 UNIQUE(user_id, name)가 막는다.
+     * 그래서 지운 행이 있으면 **그 행을 되살린다** — 새로 만드는 대신.
+     * 예전에 그 태그가 붙어 있던 할 일에는 다시 붙는다. 되살리는 것이니 그게 맞다.
+     */
+    const buried = await repos.tags.findByName(clean);
+    if (buried) {
+      const revived = await repos.tags.upsert({
+        ...buried,
+        color,
+        deleted_at: null,
+        sort_order: get().tags.length,
+      });
+      set((s) => ({ tags: [...s.tags.filter((x) => x.id !== revived.id), revived] }));
+      return revived.id;
+    }
     const tag = await repos.tags.upsert({
       id: newId(),
       user_id: 'local-user',

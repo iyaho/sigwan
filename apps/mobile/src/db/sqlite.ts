@@ -122,6 +122,47 @@ async function open() {
       PRIMARY KEY (task_id, tag_id)
     );
 
+    -- 명세 3.8 / 5.1 — 고정 일정·설정·체크
+    -- 기존 설치에도 IF NOT EXISTS로 그냥 생긴다. 마이그레이션이 따로 필요 없다.
+    CREATE TABLE IF NOT EXISTS routines (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      weekdays TEXT NOT NULL,                    -- '0,2' — 0=월 … 6=일
+      start_min INTEGER NOT NULL,
+      end_min INTEGER NOT NULL CHECK (end_min > start_min),  -- 자정 넘김 미지원 (3.8.1)
+      color TEXT NOT NULL,
+      active_from TEXT,
+      active_to TEXT,
+      deleted_at TEXT,
+      rev INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_routines_live ON routines (user_id) WHERE deleted_at IS NULL;
+
+    CREATE TABLE IF NOT EXISTS settings (
+      user_id TEXT PRIMARY KEY,
+      sleep TEXT NOT NULL,                       -- JSON {weekdayStart,weekdayEnd,weekendStart,weekendEnd}
+      weight_urgent REAL NOT NULL DEFAULT 0.6,
+      half_life_hours REAL NOT NULL DEFAULT 48,
+      gap_min INTEGER NOT NULL DEFAULT 10,
+      updated_at TEXT NOT NULL,
+      rev INTEGER NOT NULL DEFAULT 0
+    );
+
+    -- id가 routine_id + ':' + day 로 계산된 값이다 (명세 5.1). 7장 UUIDv7 원칙의 유일한 예외 —
+    -- 이 행은 '새로 만드는 것'이 아니라 (일정, 날짜) 한 쌍에 대한 사실이라, 웹과 앱이
+    -- 각각 체크해도 같은 행을 두 번 쓰게 되어 병합이 필요 없다.
+    CREATE TABLE IF NOT EXISTS routine_checks (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      routine_id TEXT NOT NULL,
+      day TEXT NOT NULL,                         -- 로컬 날짜 YYYY-MM-DD (7장)
+      checked_at TEXT NOT NULL,
+      deleted_at TEXT,
+      rev INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_routine_checks_day ON routine_checks (user_id, day) WHERE deleted_at IS NULL;
+
     -- 7장 아웃박스: 로컬 쓰기 로그. M2에서 온라인이 되면 seq 순으로 서버에 flush
     CREATE TABLE IF NOT EXISTS outbox (
       seq INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,7 +224,9 @@ export async function resetAll() {
   const db = await getDb();
   await serial(() =>
     db.execAsync(
-      'DELETE FROM task_tags; DELETE FROM blocks; DELETE FROM tasks; DELETE FROM tags; DELETE FROM outbox; DELETE FROM meta;',
+      'DELETE FROM task_tags; DELETE FROM blocks; DELETE FROM tasks; DELETE FROM tags;' +
+        ' DELETE FROM routine_checks; DELETE FROM routines; DELETE FROM settings;' +
+        ' DELETE FROM outbox; DELETE FROM meta;',
     ),
   );
   await seedIfEmpty(db);

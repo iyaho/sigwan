@@ -45,11 +45,18 @@ export function shiftYmd(s: string, days: number) {
   return ymd(dt);
 }
 
+/**
+ * 'YYYY-MM-DD' → '2027년 3월 2일 (화)'.
+ *
+ * 연도를 늘 붙인다. 달력에서 내년을 고를 수 있게 된 이상, 표시에 연도가 없으면
+ * 「3월 2일」이 올해인지 내년인지 화면만 보고는 알 수가 없다.
+ * 시각(T12:00:00)을 붙여 파싱하는 이유는 자정으로 읽으면 타임존에 따라 전날이 되기 때문이다.
+ */
 export function fmtYmd(s: string) {
-  const [, m, d] = s.split('-');
+  const [y, m, d] = s.split('-');
   const dt = new Date(`${s}T12:00:00`);
   const w = ['일', '월', '화', '수', '목', '금', '토'][dt.getDay()];
-  return `${Number(m)}월 ${Number(d)}일 (${w})`;
+  return `${y}년 ${Number(m)}월 ${Number(d)}일 (${w})`;
 }
 
 export function fmtEst(min: number) {

@@ -59,12 +59,16 @@ export function AddTask({ open, onClose }: { open: boolean; onClose: () => void 
   const ref = useRef<HTMLDialogElement>(null);
 
   const [title, setTitle] = useState('');
-  const [dateStr, setDateStr] = useState<string | null>(null);
+  const [dateStr, setDateStr] = useState<string | null>(ymd(new Date()));
   /**
    * 어떤 칩을 눌렀는가. 날짜 값으로 켜짐을 판단하면 안 된다 —
    * 금요일에는 「내일」과 「이번 주말」이 같은 날짜라 칩 두 개가 동시에 켜진다.
    */
-  const [datePreset, setDatePreset] = useState('없음');
+  /**
+   * 기본은 「오늘」. 「없음」이면 kind가 someday가 되어 인박스로만 쌓이고
+   * 정작 오늘 목록은 비어 있게 된다 (2장).
+   */
+  const [datePreset, setDatePreset] = useState('오늘');
   const [timeStr, setTimeStr] = useState('');
   const [estMin, setEstMin] = useState(60);
   const [importance, setImportance] = useState(3);
@@ -84,8 +88,8 @@ export function AddTask({ open, onClose }: { open: boolean; onClose: () => void 
 
   function reset() {
     setTitle('');
-    setDateStr(null);
-    setDatePreset('없음');
+    setDateStr(ymd(new Date()));
+    setDatePreset('오늘');
     setTimeStr('');
     setEstMin(60);
     setImportance(3);
