@@ -28,8 +28,16 @@ const hours = (min: number) =>
   min >= 60 ? `${Math.round((min / 60) * 10) / 10}시간` : `${min}분`;
 
 export function AutoSchedule() {
-  const { proposals, autoResult, dropProposal, clearProposals, applyProposals, revealTask } =
-    useStore();
+  const {
+    proposals,
+    autoResult,
+    autoRange,
+    propose,
+    dropProposal,
+    clearProposals,
+    applyProposals,
+    revealTask,
+  } = useStore();
 
   /** 날짜별로 묶어야 "수요일에만 몰렸네"가 보인다 */
   const byDay = useMemo(() => {
@@ -51,7 +59,16 @@ export function AutoSchedule() {
   return (
     <aside className="auto-card" aria-label="자동 배치 제안">
       <header className="auto-head">
-        <strong>자동 배치 제안</strong>
+        <strong>자동 배치</strong>
+        {/* 버튼 두 개로 나누지 않고 여기 둔다 — 눌러보기 전에 고르게 하면 비교를 못 한다 */}
+        <div className="chips auto-range">
+          <button type="button" className="chip" aria-pressed={autoRange === 'today'} onClick={() => propose('today')}>
+            오늘
+          </button>
+          <button type="button" className="chip" aria-pressed={autoRange === 'week'} onClick={() => propose('week')}>
+            7일
+          </button>
+        </div>
         <span className="count">
           {proposals.length}개 · {hours(totalMin)}
         </span>
@@ -86,11 +103,17 @@ export function AutoSchedule() {
           </div>
         ))}
 
-        {!proposals.length && <p className="hint">넣은 제안이 없다.</p>}
+        {!proposals.length && (
+          <p className="hint">
+            {autoRange === 'today' ? '오늘 남은 시간에는 넣을 자리가 없다.' : '넣을 제안이 없다.'}
+          </p>
+        )}
 
         {unplaced.length > 0 && (
           <div className="auto-unplaced">
-            <span className="auto-unplaced-head">이번 주에 안 들어가는 것 {unplaced.length}개</span>
+            <span className="auto-unplaced-head">
+              {autoRange === 'today' ? '오늘 안 들어가는 것' : '이번 주에 안 들어가는 것'} {unplaced.length}개
+            </span>
             {unplaced.map((u) => (
               <div key={u.taskId} className="auto-row">
                 <button type="button" className="auto-title" onClick={() => revealTask(u.taskId)}>

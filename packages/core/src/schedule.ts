@@ -80,6 +80,20 @@ export function expandRoutines(routines: Routine[], from: Date, to: Date): Block
   );
 }
 
+/**
+ * 「오늘」의 끝. 자정이 아니라 **내일 기상 시각**이다.
+ *
+ * 새벽 1시에 자는 사람에게 자정으로 끊으면 00:00~01:00을 통째로 버린다.
+ * 기상 시각까지로 잡아두면 수면 띠가 01:00~08:00을 알아서 막으므로,
+ * 실질적으로 "지금부터 잘 때까지"가 된다.
+ */
+export function endOfWakingDay(sleep: SleepPattern, now = new Date()): Date {
+  const tomorrow = addDays(startOfDay(now), 1);
+  const wakeDay = tomorrow.getDay(); // 0=일, 6=토 — sleepSpans와 같은 판정
+  const weekend = wakeDay === 0 || wakeDay === 6;
+  return new Date(tomorrow.getTime() + (weekend ? sleep.weekendEnd : sleep.weekdayEnd) * 60_000);
+}
+
 /** 체크 기록의 키. 웹과 앱이 같은 규칙으로 만들어야 같은 행을 가리킨다 */
 export const checkKey = (routineId: string, day: string) => `${routineId}:${day}`;
 

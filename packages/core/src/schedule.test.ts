@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   autoSchedule,
+  endOfWakingDay,
   expandRoutines,
   freeSpans,
   insetSpans,
@@ -307,5 +308,37 @@ describe('간격', () => {
     });
     expect(new Date(proposals[0]!.start).getHours()).toBe(12);
     expect(new Date(proposals[0]!.start).getMinutes()).toBe(0);
+  });
+});
+
+describe('「오늘」의 끝', () => {
+  it('자정이 아니라 내일 기상 시각이다', () => {
+    // 2026-09-17 목요일 밤 → 금요일 기상(평일 08:00)
+    const e = endOfWakingDay(SLEEP, d('2026-09-17T22:00:00+09:00'));
+    expect(e.getDate()).toBe(18);
+    expect(e.getHours()).toBe(8);
+  });
+
+  it('금요일 밤은 주말 기상 시각으로 끝난다', () => {
+    const e = endOfWakingDay(SLEEP, d('2026-09-18T22:00:00+09:00'));
+    expect(e.getDate()).toBe(19);
+    expect(e.getHours()).toBe(10); // 주말 기상
+  });
+
+  it('23:30에 눌러도 자정 뒤 자리가 남는다 — 자정으로 끊으면 버려지는 시간이다', () => {
+    const late = d('2026-09-17T23:30:00+09:00');
+    const t = task({ id: '과제', estimate_min: 45, due_at: '2026-09-20T23:59:00+09:00' });
+    const { proposals } = autoSchedule({
+      tasks: [t],
+      blocks: [],
+      routines: [],
+      sleep: SLEEP,
+      from: late,
+      to: endOfWakingDay(SLEEP, late),
+      now: late,
+      gapMin: 10,
+    });
+    expect(proposals.length).toBeGreaterThan(0);
+    expect(Date.parse(proposals[0]!.end)).toBeGreaterThan(d('2026-09-18T00:00:00+09:00').getTime());
   });
 });

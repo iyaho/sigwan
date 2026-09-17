@@ -1,5 +1,5 @@
 import type { Routine, SleepPattern } from '@sigwan/core';
-import { WEEKDAY_SHORT, hhmm, parseHhmm } from '@sigwan/core';
+import { WEEKDAY_SHORT, hhmm, parseHhmm, ymd } from '@sigwan/core';
 import type * as React from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { useStore } from '../store';
@@ -151,7 +151,9 @@ export function RoutineGrid() {
       start: s,
       end: t,
       color: TAG_COLORS[routines.length % TAG_COLORS.length] as string,
-      from: '',
+      // 오늘부터 무기한이 기본. 비워두면 "예전에도 있던 일정"이 되어
+      // 지난 주 화면까지 바뀐다 — 학기 중에 새로 넣는 쪽이 압도적으로 흔하다.
+      from: ymd(new Date()),
       to: '',
     });
   }
@@ -359,7 +361,7 @@ export function RoutineGrid() {
             <span className="sub-label">~</span>
             <input type="date" className="txt txt-sm" value={edit.to} onChange={(e) => setEdit({ ...edit, to: e.target.value })} />
           </div>
-          <span className="hint">학기를 비우면 무기한이다. 끝나는 날을 넣어두면 그 뒤로는 자동 배치가 이 자리를 비운다.</span>
+          <span className="hint">오늘부터 무기한이 기본이다. 끝나는 날을 넣어두면 그 뒤로는 자동 배치가 이 자리를 비운다.</span>
 
           {err && <p className="err">{err}</p>}
 

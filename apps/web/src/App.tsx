@@ -155,12 +155,12 @@ export default function App() {
             <span className="trash-hint">여기로 막대를 끌면 블록만 지워진다</span>
             <button
               type="button"
-              onClick={propose}
-              className="ghost-btn"
+              onClick={() => propose()}
+              className="auto-btn"
               style={{ marginLeft: 'auto' }}
-              title="아직 시간을 안 잡은 할 일을 수면·고정 일정을 피해 빈 자리에 넣어본다 (7일)"
+              title="아직 시간을 안 잡은 할 일을 수면·고정 일정을 피해 빈 자리에 넣어본다"
             >
-              자동 배치
+              ⚡ 자동 배치
             </button>
             <button
               type="button"

@@ -146,6 +146,7 @@ npx expo start --dev-client     # Metro만 띄우기
 | `ERR_PNPM_GLOBAL_BIN_DIR_NOT_IN_PATH` | `pnpm setup` 대신 위처럼 npm으로 깔면 안 만난다 |
 | Gradle: `Worklets (0.12.2) is not compatible with Reanimated` | `react-native-worklets`는 **0.10.x**로 고정돼 있다(`apps/mobile/package.json`). peer 자동 설치가 0.12를 고르기 때문에 직접 의존성으로 박아뒀다. 건드리지 말 것 |
 | Gradle이 이상하게 죽는다 | `java -version`이 17인지 먼저 본다. 21이면 `JAVA_HOME`을 위처럼 잡는다 |
+| 웹이 흰 화면 + 콘솔에 `Invalid hook call` | React가 두 벌 깔렸다. 설정(overrides)은 맞는데 `node-linker=hoisted`가 옛 설치를 안 치워서 남은 것이다. `rm -rf node_modules apps/*/node_modules packages/*/node_modules && pnpm install` |
 | 앱이 빨간 화면 `undefined is not a function` | 대개 Metro 캐시. `npx expo start --dev-client --clear` |
 | `ConfigError: /Users/…/package.json does not exist` | `apps/mobile`이 아닌 데서 expo 명령을 쳤다 |
 | SQLite `database is locked` / `cannot rollback` | 쓰기를 `src/db/sqlite.ts`의 `withWrite()` 큐에 태우지 않았다. 연결이 하나라 트랜잭션이 겹치면 터진다 |

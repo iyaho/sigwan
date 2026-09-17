@@ -3,6 +3,7 @@ import {
   addDays,
   autoSchedule,
   DEFAULT_GAP_MIN,
+  endOfWakingDay,
   DEFAULT_SLEEP,
   FIT_LIMIT_LABEL,
   fitBlock,
@@ -23,6 +24,9 @@ import { create } from 'zustand';
 import { repos, seedIfEmpty } from './lib/db';
 
 export type { ViewKey };
+
+/** 오늘 = 지금부터 내일 기상 전까지 (core/endOfWakingDay), 7일 = 지금부터 이레 */
+export type AutoRange = 'today' | 'week';
 
 interface State {
   ready: boolean;
@@ -61,7 +65,11 @@ interface State {
   proposals: Proposal[];
   /** 못 넣은 것·빈 시간 같은 요약. 제안보다 이쪽이 중요한 정보다 */
   autoResult: AutoScheduleResult | null;
-  propose: () => void;
+  /** 배치 범위. 카드 안에서 바꾸면 그 자리에서 다시 계산한다 */
+  autoRange: AutoRange;
+  /** 손으로 옮기거나 지운 제안이 있는가 — 다시 계산할 때 말해줘야 한다 */
+  autoEdited: boolean;
+  propose: (range?: AutoRange) => void;
   editProposal: (key: string, patch: { start?: Date; end?: Date }) => void;
   dropProposal: (key: string) => void;
   clearProposals: () => void;
@@ -143,6 +151,8 @@ export const useStore = create<State>((set, get) => ({
   settings: defaultSettings(),
   proposals: [],
   autoResult: null,
+  autoRange: 'week',
+  autoEdited: false,
 
   view: 'today',
   search: '',
@@ -224,31 +234,41 @@ export const useStore = create<State>((set, get) => ({
     set((s) => ({ routines: s.routines.filter((r) => r.id !== id) }));
   },
 
-  /** 지금부터 7일. 범위를 넓히면 "다음 주 화요일 오전"처럼 안 지킬 약속이 늘어난다 */
-  propose() {
+  /**
+   * 범위를 더 넓히지 않는다. "다다음 주 화요일 오전"은 지켜지지 않는 약속이고,
+   * 그런 게 쌓이면 제안 전체를 안 믿게 된다.
+   */
+  propose(range) {
     const st = get();
+    const r = range ?? st.autoRange;
     const now = new Date();
+    const to = r === 'today' ? endOfWakingDay(st.settings.sleep, now) : addDays(startOfDay(now), 7);
     const res = autoSchedule({
       tasks: st.tasks,
       blocks: st.blocks,
       routines: st.routines,
       sleep: st.settings.sleep,
       from: now,
-      to: addDays(startOfDay(now), 7),
+      to,
       now,
       gapMin: st.settings.gap_min,
     });
-    set({ proposals: res.proposals, autoResult: res });
-    if (!res.proposals.length) {
+    set({ proposals: res.proposals, autoResult: res, autoRange: r, autoEdited: false });
+    if (st.autoEdited) {
+      set({ notice: '범위를 바꿔 다시 계산했다 — 옮겨둔 제안은 사라졌다' });
+    } else if (!res.proposals.length) {
       set({
         notice: res.unplaced.length
           ? '넣을 자리가 없다 — 아래에서 이유를 본다'
-          : '자동으로 잡을 할 일이 없다',
+          : r === 'today'
+            ? '오늘 남은 시간에는 넣을 자리가 없다'
+            : '자동으로 잡을 할 일이 없다',
       });
     }
   },
 
   editProposal(key, patch) {
+    set({ autoEdited: true });
     set((s) => ({
       proposals: s.proposals.map((p) => {
         if (p.key !== key) return p;
@@ -265,11 +285,11 @@ export const useStore = create<State>((set, get) => ({
   },
 
   dropProposal(key) {
-    set((s) => ({ proposals: s.proposals.filter((p) => p.key !== key) }));
+    set((s) => ({ proposals: s.proposals.filter((p) => p.key !== key), autoEdited: true }));
   },
 
   clearProposals() {
-    set({ proposals: [], autoResult: null });
+    set({ proposals: [], autoResult: null, autoEdited: false });
   },
 
   /** 여기서 처음으로 DB가 바뀐다 */
@@ -282,6 +302,7 @@ export const useStore = create<State>((set, get) => ({
     set({
       proposals: [],
       autoResult: null,
+      autoEdited: false,
       notice: `${ps.length}개 · ${Math.round((min / 60) * 10) / 10}시간을 넣었다`,
     });
   },

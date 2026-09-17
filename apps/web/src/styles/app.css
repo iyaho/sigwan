@@ -1024,3 +1024,23 @@ textarea.txt { resize: vertical; }
 @media (max-width: 720px) {
   .auto-card { left: var(--sp-4); width: auto; }
 }
+
+/* 이 앱에서 가장 특징적인 기능인데 회색 ghost 버튼이라 아무도 못 찾았다 */
+.auto-btn {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: var(--r-md);
+  padding: 3px 10px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.auto-btn:hover { background: var(--accent); color: #fff; }
+
+/* 카드 머리의 범위 토글 — 칩 두 개를 붙여 세그먼트처럼 */
+.auto-range { gap: 0; }
+.auto-range .chip { padding: 2px 10px; font-size: var(--fs-xs); border-radius: 0; }
+.auto-range .chip:first-child { border-radius: 999px 0 0 999px; }
+.auto-range .chip:last-child { border-radius: 0 999px 999px 0; margin-left: -1px; }
