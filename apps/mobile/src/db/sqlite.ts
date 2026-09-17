@@ -181,7 +181,14 @@ async function open() {
 
 /** 첫 실행에 목 데이터 (16.8-4). 트랜잭션 안에서 count를 봐서 두 번 들어가지 않는다 */
 async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
-  const row = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM tasks');
+  /**
+   * 할 일만 보면 안 된다. 할 일이 지워지고 태그만 남은 상태에서 다시 심으면
+   * 같은 이름의 태그를 또 넣게 되고 UNIQUE(user_id, name)에 걸린다.
+   * 게다가 아래 INSERT가 맨 INSERT였어서 그대로 예외가 됐다 — 지금은 OR REPLACE다.
+   */
+  const row = await db.getFirstAsync<{ n: number }>(
+    'SELECT (SELECT COUNT(*) FROM tasks) + (SELECT COUNT(*) FROM tags) AS n',
+  );
   if ((row?.n ?? 0) > 0) return;
   const m = makeMockData(new Date());
   // open() 안에서 불리므로 withWrite(→getDb)를 쓰면 자기 자신을 기다려 교착된다
@@ -189,13 +196,13 @@ async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
     db.withTransactionAsync(async () => {
     for (const t of m.tags) {
       await db.runAsync(
-        'INSERT INTO tags (id,user_id,name,color,sort_order,deleted_at,rev) VALUES (?,?,?,?,?,?,?)',
+        'INSERT OR REPLACE INTO tags (id,user_id,name,color,sort_order,deleted_at,rev) VALUES (?,?,?,?,?,?,?)',
         t.id, t.user_id, t.name, t.color, t.sort_order, t.deleted_at, t.rev,
       );
     }
     for (const t of m.tasks) {
       await db.runAsync(
-        `INSERT INTO tasks (id,user_id,title,notes,kind,status,day_of,start_at,due_at,estimate_min,spent_min,
+        `INSERT OR REPLACE INTO tasks (id,user_id,title,notes,kind,status,day_of,start_at,due_at,estimate_min,spent_min,
           importance,progress,pinned,parent_id,rrule,sort_order,score,source,estimate_is_ai,is_locked,enc_blob,
           created_at,updated_at,completed_at,deleted_at,rev)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -207,7 +214,7 @@ async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
     }
     for (const b of m.blocks) {
       await db.runAsync(
-        'INSERT INTO blocks (id,user_id,task_id,title,start_at,end_at,is_all_day,source,deleted_at,rev) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        'INSERT OR REPLACE INTO blocks (id,user_id,task_id,title,start_at,end_at,is_all_day,source,deleted_at,rev) VALUES (?,?,?,?,?,?,?,?,?,?)',
         b.id, b.user_id, b.task_id, b.title, b.start_at, b.end_at, b.is_all_day ? 1 : 0, b.source, b.deleted_at, b.rev,
       );
     }

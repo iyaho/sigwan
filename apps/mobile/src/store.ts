@@ -328,7 +328,16 @@ export const useStore = create<State>((set, get) => ({
     if (patch.name !== undefined) {
       const clean = patch.name.trim();
       if (!clean) return;
-      if (get().tags.some((t) => t.id !== id && t.name === clean && !t.deleted_at)) return;
+      if (get().tags.some((x) => x.id !== id && x.name === clean && !x.deleted_at)) return;
+      /**
+       * 지운 태그가 그 이름을 붙들고 있으면 UNIQUE(user_id, name)에 막힌다.
+       * 툼스톤을 물리 삭제하면 "지웠다"가 다른 기기에 전달되지 않으므로(7장),
+       * 대신 그 행의 이름만 비켜준다. 어차피 지워진 행이라 이름은 의미가 없다.
+       */
+      const buried = await repos.tags.findByName(clean);
+      if (buried && buried.id !== id) {
+        await repos.tags.upsert({ ...buried, name: `${clean}#${buried.id.slice(0, 8)}` });
+      }
       next = { ...patch, name: clean };
     }
     const saved = await repos.tags.upsert({ ...cur, ...next });
