@@ -122,11 +122,23 @@ async function open() {
       PRIMARY KEY (task_id, tag_id)
     );
 
+    -- 시간표 한 벌 (3.8.1). 기간을 여기가 갖는다 — 학기일 수도, 알바 스케줄이 바뀐 시기일 수도
+    CREATE TABLE IF NOT EXISTS timetables (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      active_from TEXT,
+      active_to TEXT,
+      deleted_at TEXT,
+      rev INTEGER NOT NULL DEFAULT 0
+    );
+
     -- 명세 3.8 / 5.1 — 고정 일정·설정·체크
     -- 기존 설치에도 IF NOT EXISTS로 그냥 생긴다. 마이그레이션이 따로 필요 없다.
     CREATE TABLE IF NOT EXISTS routines (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
+      timetable_id TEXT NOT NULL DEFAULT '',     -- 어느 시간표인가
       name TEXT NOT NULL,
       weekdays TEXT NOT NULL,                    -- '0,2' — 0=월 … 6=일
       start_min INTEGER NOT NULL,
@@ -175,8 +187,49 @@ async function open() {
 
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `);
+  // CREATE TABLE IF NOT EXISTS는 이미 있는 테이블에 컬럼을 더해주지 않는다. 그건 ALTER다.
+  await ensureColumn(db, 'routines', 'timetable_id', "timetable_id TEXT NOT NULL DEFAULT ''");
+  await migrateTimetables(db);
   await seedIfEmpty(db);
   return db;
+}
+
+/**
+ * 없으면 컬럼을 더한다.
+ *
+ * 스키마를 `CREATE TABLE IF NOT EXISTS` 한 덩어리로 두면 새로 까는 기기는 맞지만
+ * **이미 깔린 기기는 영영 옛 모양으로 남는다.** 컬럼이 늘 때마다 여기 한 줄씩 는다.
+ * (Drizzle을 얹으면 이 일을 마이그레이션 파일이 대신한다 — 11.3)
+ *
+ * NOT NULL 컬럼을 더하려면 기본값이 있어야 한다. 빈 문자열이 "주인 없음"이고,
+ * 바로 아래 migrateTimetables가 그걸 「기본」 시간표로 채운다.
+ */
+async function ensureColumn(db: SQLite.SQLiteDatabase, table: string, column: string, ddl: string) {
+  const cols = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+  if (cols.some((c) => c.name === column)) return;
+  await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
+
+/**
+ * 기간이 고정 일정에서 시간표로 올라갔다 (3.8.1).
+ * 이미 만든 일정은 「기본」 한 벌에 넣어준다 — 안 그러면 주인이 없어 화면에서 통째로 사라진다.
+ *
+ * 옛 컬럼(active_from/active_to)은 그냥 둔다. SQLite에서 컬럼을 지우려면 테이블을 다시 만들어야 하고,
+ * 안 읽으면 그만인 값 때문에 마이그레이션을 위험하게 만들 이유가 없다.
+ */
+async function migrateTimetables(db: SQLite.SQLiteDatabase) {
+  const orphan = await db.getFirstAsync<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM routines WHERE timetable_id = '' OR timetable_id IS NULL",
+  );
+  if ((orphan?.n ?? 0) === 0) return;
+  await serial(() =>
+    db.withTransactionAsync(async () => {
+      await db.runAsync(
+        "INSERT OR REPLACE INTO timetables (id,user_id,name,active_from,active_to,deleted_at,rev) VALUES ('tt-legacy','local-user','기본',NULL,NULL,NULL,0)",
+      );
+      await db.runAsync("UPDATE routines SET timetable_id = 'tt-legacy' WHERE timetable_id = '' OR timetable_id IS NULL");
+    }),
+  );
 }
 
 /** 첫 실행에 목 데이터 (16.8-4). 트랜잭션 안에서 count를 봐서 두 번 들어가지 않는다 */
@@ -232,7 +285,7 @@ export async function resetAll() {
   await serial(() =>
     db.execAsync(
       'DELETE FROM task_tags; DELETE FROM blocks; DELETE FROM tasks; DELETE FROM tags;' +
-        ' DELETE FROM routine_checks; DELETE FROM routines; DELETE FROM settings;' +
+        ' DELETE FROM routine_checks; DELETE FROM routines; DELETE FROM timetables; DELETE FROM settings;' +
         ' DELETE FROM outbox; DELETE FROM meta;',
     ),
   );

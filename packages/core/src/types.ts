@@ -142,6 +142,8 @@ export type AiDraft = z.infer<typeof AiDraftSchema>;
 export const RoutineSchema = z.object({
   id: z.string(),
   user_id: z.string(),
+  /** 어느 시간표에 속하는가. 기간은 시간표가 갖는다 */
+  timetable_id: z.string(),
   name: z.string().min(1).max(100),
   /** 0=월 … 6=일 */
   weekdays: z.array(z.number().int().min(0).max(6)).min(1),
@@ -149,13 +151,31 @@ export const RoutineSchema = z.object({
   start_min: z.number().int().min(0).max(1439),
   end_min: z.number().int().min(1).max(1440),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  /** 학기처럼 기간이 있는 경우. null이면 무기한 */
+  deleted_at: iso.nullable().default(null),
+  rev: z.number().int().default(0),
+});
+export type Routine = z.infer<typeof RoutineSchema>;
+
+/**
+ * 시간표 한 벌 (3.8.1) — 학기일 수도, 알바 스케줄이 바뀐 시기일 수도 있다.
+ *
+ * 기간을 고정 일정마다 두면 시작일이 한 주 밀렸을 때 일정 여섯 개를 전부 고쳐야 한다.
+ * 한 벌로 묶으면 한 줄이다. 그리고 이름이 있어야 전환·복제가 말이 된다.
+ *
+ * **기간이 겹치지 않는다.** 새 시간표를 만들면 이전 것을 그 전날로 닫는다 —
+ * 겹쳐 두면 자동 배치가 둘을 합쳐서 피해버린다.
+ */
+export const TimetableSchema = z.object({
+  id: z.string(),
+  user_id: z.string(),
+  name: z.string().min(1).max(60),
+  /** null이면 열려 있다 (앞/뒤로 무기한) */
   active_from: localDate.nullable().default(null),
   active_to: localDate.nullable().default(null),
   deleted_at: iso.nullable().default(null),
   rev: z.number().int().default(0),
 });
-export type Routine = z.infer<typeof RoutineSchema>;
+export type Timetable = z.infer<typeof TimetableSchema>;
 
 /**
  * 수면 패턴 (3.8). 평일과 주말 둘로 받는다 — 요일별 7줄은 정확하지만 아무도 안 채운다.

@@ -15,6 +15,8 @@ import type {
   TaskFilter,
   TaskRepo,
   TaskTag,
+  Timetable,
+  TimetableRepo,
 } from '@sigwan/core';
 import { checkKey, makeMockData, nowIso } from '@sigwan/core';
 import Dexie, { type EntityTable } from 'dexie';
@@ -32,6 +34,7 @@ class SigwanDb extends Dexie {
   blocks!: EntityTable<Block, 'id'>;
   tags!: EntityTable<Tag, 'id'>;
   task_tags!: EntityTable<TaskTag & { id: string }, 'id'>;
+  timetables!: EntityTable<Timetable, 'id'>;
   routines!: EntityTable<Routine, 'id'>;
   routine_checks!: EntityTable<RoutineCheck, 'id'>;
   /** 사용자당 한 행이라 기본키가 user_id다 */
@@ -54,6 +57,30 @@ class SigwanDb extends Dexie {
     this.version(3).stores({
       routine_checks: 'id, routine_id, day, deleted_at, rev',
     });
+    /**
+     * 시간표 한 벌 (3.8.1). 기간이 일정에서 시간표로 올라갔다.
+     * 이미 만든 고정 일정은 「기본」 한 벌에 넣어준다 — 안 그러면 화면에서 통째로 사라진다.
+     */
+    this.version(4)
+      .stores({
+        timetables: 'id, deleted_at, rev',
+        routines: 'id, timetable_id, deleted_at, rev',
+      })
+      .upgrade(async (tx) => {
+        const rows = await tx.table('routines').toArray();
+        if (!rows.length) return;
+        const id = 'tt-legacy';
+        await tx.table('timetables').put({
+          id,
+          user_id: USER_ID,
+          name: '기본',
+          active_from: null,
+          active_to: null,
+          deleted_at: null,
+          rev: 0,
+        });
+        await tx.table('routines').bulkPut(rows.map((r) => ({ ...r, timetable_id: id })));
+      });
   }
 }
 
@@ -228,6 +255,24 @@ class LocalRoutineRepo implements RoutineRepo {
   }
 }
 
+class LocalTimetableRepo implements TimetableRepo {
+  async list() {
+    return (await db.timetables.toArray())
+      .filter((t) => !t.deleted_at)
+      .sort((a, b) => (b.active_from ?? '').localeCompare(a.active_from ?? '') || a.name.localeCompare(b.name));
+  }
+  async upsert(t: Timetable) {
+    const next = { ...t, user_id: USER_ID, rev: t.rev + 1 };
+    await db.timetables.put(next);
+    return next;
+  }
+  async remove(id: string) {
+    const t = await db.timetables.get(id);
+    if (!t) return;
+    await db.timetables.put({ ...t, deleted_at: nowIso(), rev: t.rev + 1 });
+  }
+}
+
 class LocalRoutineCheckRepo implements RoutineCheckRepo {
   async listRange(from: string, to: string) {
     const rows = await db.routine_checks.where('day').between(from, to, true, true).toArray();
@@ -271,6 +316,7 @@ export const repos: Repos = {
   tasks: new LocalTaskRepo(),
   blocks: new LocalBlockRepo(),
   tags: new LocalTagRepo(),
+  timetables: new LocalTimetableRepo(),
   routines: new LocalRoutineRepo(),
   routineChecks: new LocalRoutineCheckRepo(),
   settings: new LocalSettingsRepo(),

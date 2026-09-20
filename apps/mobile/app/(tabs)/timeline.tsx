@@ -24,7 +24,7 @@ import { radius, sp, useTheme } from '@/theme';
 export default function TimelineScreen() {
   const th = useTheme();
   const insets = useSafeAreaInsets();
-  const { blocks, tasks, routines, routineChecks, proposals, propose } = useStore();
+  const { blocks, tasks, routines, timetables, routineChecks, proposals, propose } = useStore();
   const [day, setDay] = useState(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -75,9 +75,9 @@ export default function TimelineScreen() {
    */
   const fixed = useMemo(() => {
     const today = ymd(new Date());
-    const occ = routineOccurrences(routines, range.start, range.end).filter((o) => o.day <= today);
+    const occ = routineOccurrences(routines, timetables, range.start, range.end).filter((o) => o.day <= today);
     return { done: occ.filter((o) => routineChecks[checkKey(o.routine.id, o.day)]).length, total: occ.length };
-  }, [routines, routineChecks, range]);
+  }, [routines, timetables, routineChecks, range]);
 
   // 주 모드에서는 한 주씩 넘긴다
   const shift = (n: number) => setDay(addDays(day, mode === 'week' ? n * 7 : n));

@@ -18,7 +18,7 @@ import { QuarterGrid } from './QuarterGrid';
  * 주 뷰도 편집이 된다. 월·분기는 '언제 무엇이 걸려 있나'만 답하면 되므로 달력이 맞다.
  */
 export function Timeline() {
-  const { zoom, origin, tasks, routines, routineChecks, setOrigin, setZoom } = useStore();
+  const { zoom, origin, tasks, routines, timetables, routineChecks, setOrigin, setZoom } = useStore();
   const range = useMemo(() => viewRange(zoom, origin), [zoom, origin]);
 
   const prog = useMemo(() => rangeProgress(tasks, range.start, range.end), [tasks, range]);
@@ -31,10 +31,10 @@ export function Timeline() {
    */
   const fixed = useMemo(() => {
     const today = ymd(new Date());
-    const occ = routineOccurrences(routines, range.start, range.end).filter((o) => o.day <= today);
+    const occ = routineOccurrences(routines, timetables, range.start, range.end).filter((o) => o.day <= today);
     const done = occ.filter((o) => routineChecks[checkKey(o.routine.id, o.day)]).length;
     return { done, total: occ.length };
-  }, [routines, routineChecks, range]);
+  }, [routines, timetables, routineChecks, range]);
 
   return (
     <>

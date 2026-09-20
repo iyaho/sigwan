@@ -1044,3 +1044,13 @@ textarea.txt { resize: vertical; }
 .auto-range .chip { padding: 2px 10px; font-size: var(--fs-xs); border-radius: 0; }
 .auto-range .chip:first-child { border-radius: 999px 0 0 999px; }
 .auto-range .chip:last-child { border-radius: 0 999px 999px 0; margin-left: -1px; }
+
+/* 시간표(학기) 전환 줄 — 격자 위 */
+.rg-sets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: var(--sp-2);
+}
+.rg-sets select { padding: 4px 8px; }

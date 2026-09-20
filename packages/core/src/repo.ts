@@ -1,4 +1,4 @@
-import type { Block, Routine, RoutineCheck, Settings, Tag, Task } from './types';
+import type { Block, Routine, RoutineCheck, Settings, Tag, Task, Timetable } from './types';
 
 /**
  * 8장 "세 번째 길" — 백엔드 결정을 미루는 경계.
@@ -73,6 +73,13 @@ export interface RoutineRepo {
   remove(id: string): Promise<void>;
 }
 
+/** 시간표 한 벌 (3.8.1). 기간은 여기가 갖는다 */
+export interface TimetableRepo {
+  list(): Promise<Timetable[]>;
+  upsert(t: Timetable): Promise<Timetable>;
+  remove(id: string): Promise<void>;
+}
+
 /** 고정 일정을 그 날 했는지. 키가 `${routine_id}:${day}`라 토글이 멱등이다 */
 export interface RoutineCheckRepo {
   /** 로컬 날짜 문자열 범위 (양끝 포함) */
@@ -91,6 +98,7 @@ export interface Repos {
   tasks: TaskRepo;
   blocks: BlockRepo;
   tags: TagRepo;
+  timetables: TimetableRepo;
   routines: RoutineRepo;
   routineChecks: RoutineCheckRepo;
   settings: SettingsRepo;

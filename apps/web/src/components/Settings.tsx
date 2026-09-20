@@ -111,7 +111,7 @@ export function Settings({ open, onClose }: { open: boolean; onClose: () => void
         <div className="fld">
           <span className="fld-label">고정 일정</span>
           <p className="hint">
-            수업·알바처럼 매주 같은 자리에 있는 것. 한 주치를 그려두면 학기 내내 적용된다.
+            수업·알바·운동처럼 매주 같은 자리에 있는 것. 한 주치를 그려두면 그 기간 내내 적용된다.
             회색 띠는 수면이다.
           </p>
           <RoutineGrid />

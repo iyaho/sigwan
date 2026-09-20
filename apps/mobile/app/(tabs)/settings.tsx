@@ -46,7 +46,7 @@ export default function SettingsScreen() {
         <Text style={[styles.section, { color: th.textFaint }]}>할 일</Text>
         <Link label="태그" value={`${tags.length}개`} onPress={() => setTagSheet(true)} />
         <Link
-          label="고정 시간표 · 수면"
+          label="시간표 · 수면"
           value={`${routines.length}개`}
           onPress={() => router.push('/routine')}
         />

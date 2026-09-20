@@ -1,6 +1,7 @@
-import type { AutoScheduleResult, Block, FitResult, Proposal, Routine, Settings, SleepPattern, Tag, Task, ZoomLevel } from '@sigwan/core';
+import type { AutoScheduleResult, Block, FitResult, Proposal, Routine, Settings, SleepPattern, Tag, Task, Timetable, ZoomLevel } from '@sigwan/core';
 import {
   addDays,
+  activeTimetable,
   autoSchedule,
   DEFAULT_GAP_MIN,
   endOfWakingDay,
@@ -34,6 +35,10 @@ interface State {
   blocks: Block[];
   tags: Tag[];
   taskTags: Record<string, string[]>;
+  /** 3.8 시간표 한 벌. 기간을 여기가 갖는다 */
+  timetables: Timetable[];
+  /** 지금 보고 있는 시간표. 화면 전용 — 배치 계산은 날짜로 정한다 */
+  currentTimetableId: string | null;
   /** 3.8 고정 일정 — 저장은 규칙으로, 화면에서 그때그때 펼친다 */
   routines: Routine[];
   /** 체크한 것만 담는다. 키는 `${routine_id}:${day}` (core/checkKey) */
@@ -81,6 +86,14 @@ interface State {
   saveRoutine: (r: Routine) => Promise<void>;
   addRoutine: (draft: Omit<Routine, 'id' | 'user_id' | 'deleted_at' | 'rev'>) => Promise<string>;
   removeRoutine: (id: string) => Promise<void>;
+
+  selectTimetable: (id: string) => void;
+  saveTimetable: (t: Timetable) => Promise<void>;
+  /** 빈 시간표를 새로 만든다. 이전 것은 그 전날로 닫는다 */
+  addTimetable: (name: string, from: string | null) => Promise<string>;
+  /** 지금 것을 통째로 복제한다 — 새 시간표는 대개 몇 개만 바뀐다 */
+  duplicateTimetable: (name: string, from: string | null) => Promise<string>;
+  removeTimetable: (id: string) => Promise<void>;
   /** 그 날짜의 고정 일정 체크를 켜고 끈다 */
   toggleRoutineCheck: (routineId: string, day: string) => Promise<void>;
 
@@ -123,6 +136,25 @@ interface State {
 /** StrictMode가 effect를 두 번 돌린다. 목 데이터 53건 × tagsOf 쿼리를 두 벌 돌릴 이유가 없다. */
 let loading: Promise<void> | null = null;
 
+/**
+ * 시간표가 하나도 없으면 빈 것을 하나 만들어 둔다.
+ *
+ * 없는 상태를 화면이 감당하게 두면 "먼저 시간표를 만드세요"가 첫 단계가 된다.
+ * 고정 일정을 넣으려던 사람에게 그건 군더더기다. 기간은 열어 둔다 —
+ * 두 벌째를 만들 때 그때 닫힌다.
+ */
+async function makeDefaultTimetable() {
+  return repos.timetables.upsert({
+    id: newId(),
+    user_id: 'local-user',
+    name: '기본',
+    active_from: null,
+    active_to: null,
+    deleted_at: null,
+    rev: 0,
+  });
+}
+
 /** 아직 저장된 설정이 없을 때. 첫 저장에서 이 값이 그대로 행이 된다 */
 function defaultSettings(): Settings {
   return {
@@ -146,6 +178,8 @@ export const useStore = create<State>((set, get) => ({
   blocks: [],
   tags: [],
   taskTags: {},
+  timetables: [],
+  currentTimetableId: null,
   routines: [],
   routineChecks: {},
   settings: defaultSettings(),
@@ -167,9 +201,10 @@ export const useStore = create<State>((set, get) => ({
     if (loading) return loading;
     loading = (async () => {
     await seedIfEmpty();
-    const [tasks, tags, routines, settings] = await Promise.all([
+    const [tasks, tags, timetables, routines, settings] = await Promise.all([
       repos.tasks.list(),
       repos.tags.list(),
+      repos.timetables.list(),
       repos.routines.list(),
       repos.settings.get(),
     ]);
@@ -186,7 +221,20 @@ export const useStore = create<State>((set, get) => ({
     for (const c of checkRows) routineChecks[c.id] = true;
     const taskTags: Record<string, string[]> = {};
     for (const t of tasks) taskTags[t.id] = (await repos.tags.tagsOf(t.id)).map((x) => x.id);
-    set({ tasks, blocks, tags, taskTags, routines, routineChecks, settings: settings ?? defaultSettings(), ready: true });
+    const tts = timetables.length ? timetables : [await makeDefaultTimetable()];
+    set({
+      tasks,
+      blocks,
+      tags,
+      taskTags,
+      timetables: tts,
+      // 오늘 유효한 것을 기본으로 편다. 없으면 가장 최근 것
+      currentTimetableId: (activeTimetable(tts) ?? tts[0])?.id ?? null,
+      routines,
+      routineChecks,
+      settings: settings ?? defaultSettings(),
+      ready: true,
+    });
     })();
     return loading;
   },
@@ -223,6 +271,71 @@ export const useStore = create<State>((set, get) => ({
     }));
   },
 
+  selectTimetable(id) {
+    set({ currentTimetableId: id });
+  },
+
+  async saveTimetable(t) {
+    const saved = await repos.timetables.upsert(t);
+    set((s) => ({
+      timetables: s.timetables.some((x) => x.id === saved.id)
+        ? s.timetables.map((x) => (x.id === saved.id ? saved : x))
+        : [...s.timetables, saved],
+    }));
+  },
+
+  /**
+   * 새 시간표. 기간이 겹치면 자동 배치가 둘을 합쳐서 피해버리므로,
+   * 시작일이 있으면 그 앞의 열린 시간표를 **전날로 닫는다**.
+   */
+  async addTimetable(name, from) {
+    const id = newId();
+    if (from) {
+      const prevDay = ymd(new Date(new Date(`${from}T00:00:00`).getTime() - 864e5));
+      for (const t of get().timetables) {
+        if (t.active_to === null && (t.active_from ?? '') < from) {
+          await get().saveTimetable({ ...t, active_to: prevDay });
+        }
+      }
+    }
+    await get().saveTimetable({
+      id,
+      user_id: 'local-user',
+      name: name.trim() || '새 시간표',
+      active_from: from,
+      active_to: null,
+      deleted_at: null,
+      rev: 0,
+    });
+    set({ currentTimetableId: id });
+    return id;
+  },
+
+  async duplicateTimetable(name, from) {
+    const src = get().currentTimetableId;
+    const id = await get().addTimetable(name, from);
+    for (const r of get().routines.filter((x) => x.timetable_id === src)) {
+      await get().saveRoutine({ ...r, id: newId(), timetable_id: id, rev: 0 });
+    }
+    return id;
+  },
+
+  async removeTimetable(id) {
+    await repos.timetables.remove(id);
+    // 그 시간표의 일정도 같이 접는다 — 주인 없는 일정은 어디에도 안 그려진다
+    for (const r of get().routines.filter((x) => x.timetable_id === id)) {
+      await repos.routines.remove(r.id);
+    }
+    set((s) => {
+      const timetables = s.timetables.filter((t) => t.id !== id);
+      return {
+        timetables,
+        routines: s.routines.filter((r) => r.timetable_id !== id),
+        currentTimetableId: s.currentTimetableId === id ? (timetables[0]?.id ?? null) : s.currentTimetableId,
+      };
+    });
+  },
+
   async addRoutine(draft) {
     const r: Routine = { ...draft, id: newId(), user_id: 'local-user', deleted_at: null, rev: 0 };
     await get().saveRoutine(r);
@@ -247,6 +360,7 @@ export const useStore = create<State>((set, get) => ({
       tasks: st.tasks,
       blocks: st.blocks,
       routines: st.routines,
+      timetables: st.timetables,
       sleep: st.settings.sleep,
       from: now,
       to,

@@ -14,6 +14,8 @@ import type {
   Task,
   TaskFilter,
   TaskRepo,
+  Timetable,
+  TimetableRepo,
 } from '@sigwan/core';
 import { checkKey, nowIso } from '@sigwan/core';
 import type { SQLiteDatabase } from 'expo-sqlite';
@@ -101,17 +103,28 @@ const toWeekdays = (v: unknown): number[] =>
     .map(Number);
 const fromWeekdays = (w: number[]) => [...w].sort((a, b) => a - b).join(',');
 
+function rowToTimetable(r: Row): Timetable {
+  return {
+    id: r.id as string,
+    user_id: r.user_id as string,
+    name: r.name as string,
+    active_from: (r.active_from as string | null) ?? null,
+    active_to: (r.active_to as string | null) ?? null,
+    deleted_at: (r.deleted_at as string | null) ?? null,
+    rev: r.rev as number,
+  };
+}
+
 function rowToRoutine(r: Row): Routine {
   return {
     id: r.id as string,
     user_id: r.user_id as string,
+    timetable_id: r.timetable_id as string,
     name: r.name as string,
     weekdays: toWeekdays(r.weekdays),
     start_min: r.start_min as number,
     end_min: r.end_min as number,
     color: r.color as string,
-    active_from: (r.active_from as string | null) ?? null,
-    active_to: (r.active_to as string | null) ?? null,
     deleted_at: (r.deleted_at as string | null) ?? null,
     rev: r.rev as number,
   };
@@ -313,6 +326,34 @@ class SqliteTagRepo implements TagRepo {
   }
 }
 
+class SqliteTimetableRepo implements TimetableRepo {
+  async list() {
+    const db = await getDb();
+    const rows = await db.getAllAsync<Row>(
+      'SELECT * FROM timetables WHERE user_id = ? AND deleted_at IS NULL ORDER BY COALESCE(active_from, \'\') DESC, name',
+      USER_ID,
+    );
+    return rows.map(rowToTimetable);
+  }
+  async upsert(t: Timetable) {
+    const next: Timetable = { ...t, user_id: USER_ID, rev: t.rev + 1 };
+    await withWrite(async (db) => {
+      await db.runAsync(
+        'INSERT OR REPLACE INTO timetables (id,user_id,name,active_from,active_to,deleted_at,rev) VALUES (?,?,?,?,?,?,?)',
+        next.id, next.user_id, next.name, next.active_from, next.active_to, next.deleted_at, next.rev,
+      );
+      await outbox(db, 'timetables', next.id, 'upsert', next);
+    });
+    return next;
+  }
+  async remove(id: string) {
+    const db = await getDb();
+    const r = await db.getFirstAsync<Row>('SELECT * FROM timetables WHERE id = ?', id);
+    if (!r) return;
+    await this.upsert({ ...rowToTimetable(r), deleted_at: nowIso() });
+  }
+}
+
 /** 3.8 고정 일정 — 규칙으로 저장한다. 펼치는 것은 core/routineOccurrences가 한다 */
 class SqliteRoutineRepo implements RoutineRepo {
   async list() {
@@ -327,10 +368,10 @@ class SqliteRoutineRepo implements RoutineRepo {
     const next: Routine = { ...r, user_id: USER_ID, rev: r.rev + 1 };
     await withWrite(async (db) => {
       await db.runAsync(
-        `INSERT OR REPLACE INTO routines (id,user_id,name,weekdays,start_min,end_min,color,active_from,active_to,deleted_at,rev)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-        next.id, next.user_id, next.name, fromWeekdays(next.weekdays), next.start_min, next.end_min,
-        next.color, next.active_from, next.active_to, next.deleted_at, next.rev,
+        `INSERT OR REPLACE INTO routines (id,user_id,timetable_id,name,weekdays,start_min,end_min,color,deleted_at,rev)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        next.id, next.user_id, next.timetable_id, next.name, fromWeekdays(next.weekdays),
+        next.start_min, next.end_min, next.color, next.deleted_at, next.rev,
       );
       await outbox(db, 'routines', next.id, 'upsert', next);
     });
@@ -409,6 +450,7 @@ export const repos: Repos & { tags: SqliteTagRepo } = {
   tasks: new SqliteTaskRepo(),
   blocks: new SqliteBlockRepo(),
   tags: new SqliteTagRepo(),
+  timetables: new SqliteTimetableRepo(),
   routines: new SqliteRoutineRepo(),
   routineChecks: new SqliteRoutineCheckRepo(),
   settings: new SqliteSettingsRepo(),

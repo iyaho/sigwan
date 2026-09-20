@@ -1,5 +1,5 @@
 import type { Routine } from '@sigwan/core';
-import { WEEKDAY_SHORT, hhmm, ymd } from '@sigwan/core';
+import { WEEKDAY_SHORT, hhmm } from '@sigwan/core';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useStore } from '../store';
@@ -30,7 +30,10 @@ export function RoutineSheet({
   onClose: () => void;
 }) {
   const th = useTheme();
-  const { routines, settings, addRoutine, saveRoutine, removeRoutine } = useStore();
+  const { routines: allRoutines, currentTimetableId, settings, addRoutine, saveRoutine, removeRoutine } =
+    useStore();
+  /** 겹침 검사와 격자는 고른 한 벌 안에서만 본다 */
+  const routines = allRoutines.filter((r) => r.timetable_id === currentTimetableId);
 
   const [name, setName] = useState('');
   const [weekdays, setWeekdays] = useState<number[]>([]);
@@ -87,9 +90,8 @@ export function RoutineSheet({
       start_min: start,
       end_min: end,
       color,
-      // 오늘부터 무기한이 기본. 비워두면 지난 주 화면까지 바뀐다
-      active_from: routine?.active_from ?? ymd(new Date()),
-      active_to: routine?.active_to ?? null,
+      // 기간은 시간표가 갖는다 (3.8.1)
+      timetable_id: routine?.timetable_id ?? currentTimetableId ?? '',
     };
     if (routine) await saveRoutine({ ...routine, ...body });
     else await addRoutine(body);
@@ -124,14 +126,14 @@ export function RoutineSheet({
         <TextInput
           value={name}
           onChangeText={setName}
-          placeholder="자료구조 / 알바"
+          placeholder="자료구조 / 알바 / 운동"
           placeholderTextColor={th.textFaint}
           maxLength={100}
           style={[styles.input, { borderColor: th.borderStrong, color: th.text, backgroundColor: th.bg }]}
         />
       </Field>
 
-      <Field label="요일" hint="여러 요일을 고르면 한 과목으로 묶인다">
+      <Field label="요일" hint="여러 요일을 고르면 한 일정으로 묶인다">
         <Row>
           {WEEKDAY_SHORT.map((w, i) => (
             <Chip

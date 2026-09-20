@@ -9,7 +9,7 @@ import {
   parseHhmm,
   sleepSpans,
 } from './schedule';
-import type { Block, Routine, SleepPattern, Task } from './types';
+import type { Block, Routine, SleepPattern, Task, Timetable } from './types';
 
 const SLEEP: SleepPattern = { weekdayStart: 60, weekdayEnd: 480, weekendStart: 120, weekendEnd: 600 };
 
@@ -62,16 +62,28 @@ function block(id: string, s: string, e: string, taskId: string | null = null): 
 
 const routine = (p: Partial<Routine> & { id: string; weekdays: number[] }): Routine => ({
   user_id: 'u',
+  timetable_id: 'tt',
   name: p.id,
   start_min: 9 * 60,
   end_min: 10 * 60 + 30,
   color: '#3e63dd',
+  deleted_at: null,
+  rev: 0,
+  ...p,
+});
+
+/** 기본 시간표 — 기간이 열려 있어 늘 유효하다 */
+const tt = (p: Partial<Timetable> = {}): Timetable => ({
+  id: 'tt',
+  user_id: 'u',
+  name: '이번 학기',
   active_from: null,
   active_to: null,
   deleted_at: null,
   rev: 0,
   ...p,
 });
+const TTS = [tt()];
 
 // 2026-09-16은 수요일
 const WED = new Date('2026-09-16T00:00:00+09:00');
@@ -80,20 +92,28 @@ const d = (iso: string) => new Date(iso);
 describe('고정 일정 펼치기', () => {
   it('해당 요일에만 생긴다', () => {
     const r = routine({ id: '운영체제', weekdays: [0, 2] }); // 월·수
-    const out = expandRoutines([r], WED, new Date(WED.getTime() + 7 * 864e5));
+    const out = expandRoutines([r], TTS, WED, new Date(WED.getTime() + 7 * 864e5));
     expect(out).toHaveLength(2); // 수, 다음 월
     expect(new Date(out[0]!.start_at).getHours()).toBe(9);
     expect(new Date(out[0]!.end_at).getMinutes()).toBe(30);
   });
 
-  it('기간 밖은 빠진다', () => {
-    const r = routine({ id: '학기', weekdays: [2], active_to: '2026-09-15' });
-    expect(expandRoutines([r], WED, new Date(WED.getTime() + 7 * 864e5))).toHaveLength(0);
+  it('시간표 기간 밖은 빠진다 — 기간은 일정이 아니라 시간표가 갖는다', () => {
+    const r = routine({ id: '학기', weekdays: [2] });
+    const closed = [tt({ active_to: '2026-09-15' })];
+    expect(expandRoutines([r], closed, WED, new Date(WED.getTime() + 7 * 864e5))).toHaveLength(0);
+  });
+
+  it('다른 시간표의 일정은 안 나온다', () => {
+    const mine = routine({ id: '이번', weekdays: [2] });
+    const old = routine({ id: '지난', weekdays: [2], timetable_id: 'old' });
+    const out = expandRoutines([mine, old], TTS, WED, new Date(WED.getTime() + 864e5));
+    expect(out).toHaveLength(1);
   });
 
   it('삭제된 규칙은 무시', () => {
     const r = routine({ id: 'x', weekdays: [2], deleted_at: '2026-09-01T00:00:00+09:00' });
-    expect(expandRoutines([r], WED, new Date(WED.getTime() + 864e5))).toHaveLength(0);
+    expect(expandRoutines([r], TTS, WED, new Date(WED.getTime() + 864e5))).toHaveLength(0);
   });
 });
 
@@ -148,7 +168,7 @@ describe('자동 배치', () => {
     const { proposals } = autoSchedule({
       tasks: [t],
       blocks: [],
-      routines: [r],
+      routines: [r], timetables: TTS,
       sleep: SLEEP,
       from: now,
       to,
@@ -170,7 +190,7 @@ describe('자동 배치', () => {
     const { proposals, unplaced } = autoSchedule({
       tasks: [t],
       blocks: [],
-      routines: [],
+      routines: [], timetables: TTS,
       sleep: SLEEP,
       from: now,
       to,
@@ -186,7 +206,7 @@ describe('자동 배치', () => {
     const { proposals } = autoSchedule({
       tasks: [later, urgent],
       blocks: [],
-      routines: [],
+      routines: [], timetables: TTS,
       sleep: SLEEP,
       from: now,
       to,
@@ -200,7 +220,7 @@ describe('자동 배치', () => {
     const { proposals } = autoSchedule({
       tasks: [t],
       blocks: [],
-      routines: [],
+      routines: [], timetables: TTS,
       sleep: SLEEP,
       from: now,
       to,
@@ -217,7 +237,7 @@ describe('자동 배치', () => {
     const { proposals } = autoSchedule({
       tasks: [t],
       blocks: existing,
-      routines: [],
+      routines: [], timetables: TTS,
       sleep: SLEEP,
       from: now,
       to,
@@ -231,7 +251,7 @@ describe('자동 배치', () => {
     const { proposals } = autoSchedule({
       tasks: [t],
       blocks: [],
-      routines: [],
+      routines: [], timetables: TTS,
       sleep: SLEEP,
       from: now,
       to,
@@ -246,7 +266,7 @@ describe('자동 배치', () => {
     const { proposals } = autoSchedule({
       tasks: [t],
       blocks: [],
-      routines: [],
+      routines: [], timetables: TTS,
       sleep: SLEEP,
       from: odd,
       to,
@@ -281,7 +301,7 @@ describe('간격', () => {
     const t = task({ id: '과제', estimate_min: 60, due_at: '2026-09-16T23:59:00+09:00' });
     const r = routine({ id: '수업', weekdays: [2], start_min: 9 * 60, end_min: 12 * 60 });
     const { proposals } = autoSchedule({
-      tasks: [t], blocks: [], routines: [r], sleep: SLEEP, from: now, to, now, gapMin: 10,
+      tasks: [t], blocks: [], routines: [r], timetables: TTS, sleep: SLEEP, from: now, to, now, gapMin: 10,
     });
     const first = new Date(proposals[0]!.start);
     expect(first.getHours()).toBe(12);
@@ -292,7 +312,7 @@ describe('간격', () => {
     const a = task({ id: 'a', estimate_min: 60, due_at: '2026-09-16T23:59:00+09:00' });
     const b = task({ id: 'b', estimate_min: 60, due_at: '2026-09-16T23:59:00+09:00' });
     const { proposals } = autoSchedule({
-      tasks: [a, b], blocks: [], routines: [], sleep: SLEEP, from: now, to, now, gapMin: 10,
+      tasks: [a, b], blocks: [], routines: [], timetables: TTS, sleep: SLEEP, from: now, to, now, gapMin: 10,
     });
     const sorted = [...proposals].sort((x, y) => Date.parse(x.start) - Date.parse(y.start));
     expect(sorted.length).toBeGreaterThanOrEqual(2);
@@ -304,7 +324,7 @@ describe('간격', () => {
     const t = task({ id: '과제', estimate_min: 60, due_at: '2026-09-16T23:59:00+09:00' });
     const r = routine({ id: '수업', weekdays: [2], start_min: 9 * 60, end_min: 12 * 60 });
     const { proposals } = autoSchedule({
-      tasks: [t], blocks: [], routines: [r], sleep: SLEEP, from: now, to, now,
+      tasks: [t], blocks: [], routines: [r], timetables: TTS, sleep: SLEEP, from: now, to, now,
     });
     expect(new Date(proposals[0]!.start).getHours()).toBe(12);
     expect(new Date(proposals[0]!.start).getMinutes()).toBe(0);
@@ -331,7 +351,7 @@ describe('「오늘」의 끝', () => {
     const { proposals } = autoSchedule({
       tasks: [t],
       blocks: [],
-      routines: [],
+      routines: [], timetables: TTS,
       sleep: SLEEP,
       from: late,
       to: endOfWakingDay(SLEEP, late),

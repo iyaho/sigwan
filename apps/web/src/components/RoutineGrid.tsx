@@ -12,7 +12,7 @@ import { ColorPicker, TAG_COLORS } from './Sidebar';
  * 빈 자리가 눈에 보이고, 겹침도 눈에 보인다. 학교 시간표를 옮겨 적는 일이라 이 편이 빠르다.
  *
  * 데이터는 그대로다. Routine 한 행이 "월·수 10:30–12:00"이라 격자에는 블록 두 개로 그려지고,
- * 편집창의 요일 칩이 그 한 행을 고친다. 요일을 끄면 그 요일만 빠지고, 삭제는 그 과목 전체다.
+ * 편집창의 요일 칩이 그 한 행을 고친다. 요일을 끄면 그 요일만 빠지고, 삭제는 그 일정 전체다.
  */
 
 const GUTTER = 44;
@@ -51,12 +51,29 @@ interface Editing {
   start: number;
   end: number;
   color: string;
-  from: string;
-  to: string;
 }
 
 export function RoutineGrid() {
-  const { routines, settings, addRoutine, saveRoutine, removeRoutine } = useStore();
+  const {
+    routines: allRoutines,
+    timetables,
+    currentTimetableId,
+    settings,
+    addRoutine,
+    saveRoutine,
+    removeRoutine,
+    selectTimetable,
+    saveTimetable,
+    addTimetable,
+    duplicateTimetable,
+    removeTimetable,
+  } = useStore();
+  /** 격자는 고른 한 벌만 그린다. 예전엔 전부 겹쳐 그려서 지난 시간표가 같이 보였다 */
+  const routines = useMemo(
+    () => allRoutines.filter((r) => r.timetable_id === currentTimetableId),
+    [allRoutines, currentTimetableId],
+  );
+  const current = timetables.find((t) => t.id === currentTimetableId) ?? null;
   const bodyRef = useRef<HTMLDivElement>(null);
   const [edit, setEdit] = useState<Editing | null>(null);
   const [drag, setDrag] = useState<{ wd: number; from: number; to: number } | null>(null);
@@ -119,6 +136,10 @@ export function RoutineGrid() {
 
   function onDown(e: React.PointerEvent) {
     if (edit) return; // 편집 중에는 새로 만들지 않는다
+    if (!currentTimetableId) {
+      setErr('먼저 시간표를 만든다');
+      return;
+    }
     const p = posOf(e);
     if (!p) return;
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -151,10 +172,6 @@ export function RoutineGrid() {
       start: s,
       end: t,
       color: TAG_COLORS[routines.length % TAG_COLORS.length] as string,
-      // 오늘부터 무기한이 기본. 비워두면 "예전에도 있던 일정"이 되어
-      // 지난 주 화면까지 바뀐다 — 학기 중에 새로 넣는 쪽이 압도적으로 흔하다.
-      from: ymd(new Date()),
-      to: '',
     });
   }
 
@@ -179,13 +196,12 @@ export function RoutineGrid() {
     }
 
     const body = {
+      timetable_id: currentTimetableId ?? '',
       name: edit.name.trim(),
       weekdays: [...edit.weekdays].sort((a, b) => a - b),
       start_min: edit.start,
       end_min: edit.end,
       color: edit.color,
-      active_from: edit.from || null,
-      active_to: edit.to || null,
     };
     if (edit.id) {
       const cur = routines.find((r) => r.id === edit.id);
@@ -202,8 +218,81 @@ export function RoutineGrid() {
     : null;
   const dragBad = dragBox ? !!conflict([dragBox.wd], dragBox.s, dragBox.e, null) : false;
 
+  /** 새 시간표는 대개 지금 것에서 몇 개만 바뀐다 — 빈 것보다 복제가 기본이어야 한다 */
+  async function newSemester(copy: boolean) {
+    const name = window.prompt('새 시간표 이름', `${new Date().getFullYear()} 가을`);
+    if (name === null) return;
+    const from = ymd(new Date());
+    if (copy) await duplicateTimetable(name, from);
+    else await addTimetable(name, from);
+  }
+
   return (
     <div className="rg">
+      {/* 시간표 한 벌 (3.8.1). 기간이 겹치지 않게, 새로 만들면 이전 것이 닫힌다 */}
+      <div className="rg-sets">
+        <select
+          className="txt txt-sm"
+          value={currentTimetableId ?? ''}
+          onChange={(e) => selectTimetable(e.target.value)}
+          style={{ width: 'auto', minWidth: 140 }}
+          aria-label="시간표 고르기"
+          disabled={!timetables.length}
+        >
+          {!timetables.length && <option value="">시간표 없음</option>}
+          {timetables.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+              {t.active_to ? ' (지남)' : ''}
+            </option>
+          ))}
+        </select>
+
+        {current && (
+          <>
+            <input
+              type="date"
+              className="txt txt-sm"
+              value={current.active_from ?? ''}
+              onChange={(e) => void saveTimetable({ ...current, active_from: e.target.value || null })}
+              title="시작"
+              style={{ width: 'auto' }}
+            />
+            <span className="sub-label">~</span>
+            <input
+              type="date"
+              className="txt txt-sm"
+              value={current.active_to ?? ''}
+              onChange={(e) => void saveTimetable({ ...current, active_to: e.target.value || null })}
+              title="끝 — 비우면 진행 중"
+              style={{ width: 'auto' }}
+            />
+          </>
+        )}
+
+        <button type="button" className="icon-btn" onClick={() => void newSemester(true)} title="지금 것을 복제해 새 시간표를 만든다">
+          복제해 새로
+        </button>
+        <button type="button" className="icon-btn" onClick={() => void newSemester(false)}>
+          + 빈 시간표
+        </button>
+        {current && timetables.length > 1 && (
+          <button
+            type="button"
+            className="icon-btn danger"
+            onClick={() => {
+              if (window.confirm(`「${current.name}」과 그 안의 고정 일정을 지울까?`)) void removeTimetable(current.id);
+            }}
+          >
+            삭제
+          </button>
+        )}
+      </div>
+
+      {!timetables.length && (
+        <p className="hint">시간표가 없다. 「+ 빈 시간표」로 한 벌 만들면 그 안에 일정을 넣는다.</p>
+      )}
+
       <div className="rg-head">
         <span style={{ width: GUTTER }} />
         {days.map((wd) => (
@@ -258,8 +347,6 @@ export function RoutineGrid() {
                       start: r.start_min,
                       end: r.end_min,
                       color: r.color,
-                      from: r.active_from ?? '',
-                      to: r.active_to ?? '',
                     });
                   }}
                 >
@@ -305,7 +392,7 @@ export function RoutineGrid() {
               className="txt txt-sm"
               value={edit.name}
               onChange={(e) => setEdit({ ...edit, name: e.target.value })}
-              placeholder="자료구조 / 알바"
+              placeholder="자료구조 / 알바 / 운동"
               maxLength={100}
               style={{ flex: 1 }}
             />
@@ -354,14 +441,8 @@ export function RoutineGrid() {
           <div className="sub-row">
             <span className="sub-label">색</span>
             <ColorPicker value={edit.color} onChange={(c) => setEdit({ ...edit, color: c })} />
-            <span className="sub-label" style={{ marginLeft: 'auto' }}>
-              학기
-            </span>
-            <input type="date" className="txt txt-sm" value={edit.from} onChange={(e) => setEdit({ ...edit, from: e.target.value })} />
-            <span className="sub-label">~</span>
-            <input type="date" className="txt txt-sm" value={edit.to} onChange={(e) => setEdit({ ...edit, to: e.target.value })} />
           </div>
-          <span className="hint">오늘부터 무기한이 기본이다. 끝나는 날을 넣어두면 그 뒤로는 자동 배치가 이 자리를 비운다.</span>
+          <span className="hint">기간은 시간표가 갖는다 — 위에서 고친다.</span>
 
           {err && <p className="err">{err}</p>}
 

@@ -1,7 +1,7 @@
 import { DAY_MS, addDays, startOfDay, ymd } from './calendar';
 import { MAX_SESSION_MIN, MIN_SESSION_MIN, remainingToSchedule } from './fit';
 import { priorityScore } from './score';
-import type { Block, Routine, SleepPattern, Task } from './types';
+import type { Block, Routine, SleepPattern, Task, Timetable } from './types';
 
 /**
  * 3.8 자동 배치 — 아직 시간을 안 잡은 할 일을 빈 자리에 끼워 넣는다.
@@ -54,16 +54,23 @@ export interface RoutineOccurrence {
  * 규칙을 실제 날짜로 펼친다. 화면은 이걸 쓴다 — Routine 원본이 있어야
  * 색을 칠하고 그 날짜의 체크를 토글할 수 있다.
  */
-export function routineOccurrences(routines: Routine[], from: Date, to: Date): RoutineOccurrence[] {
+export function routineOccurrences(
+  routines: Routine[],
+  timetables: Timetable[],
+  from: Date,
+  to: Date,
+): RoutineOccurrence[] {
   const out: RoutineOccurrence[] = [];
   const end = to.getTime();
+  const live = timetables.filter((t) => !t.deleted_at);
   for (let d = startOfDay(from); d.getTime() < end; d = addDays(d, 1)) {
     const wd = (d.getDay() + 6) % 7;
     const day = ymd(d);
+    // 그 날 유효한 시간표만. 기간이 겹치지 않는 게 규칙이지만, 겹쳐 들어와도 전부 적용한다
+    const ids = new Set(live.filter((t) => coversDay(t, day)).map((t) => t.id));
     for (const r of routines) {
       if (r.deleted_at || !r.weekdays.includes(wd)) continue;
-      if (r.active_from && day < r.active_from) continue;
-      if (r.active_to && day > r.active_to) continue;
+      if (!ids.has(r.timetable_id)) continue;
       const s = new Date(d.getTime() + r.start_min * 60_000);
       const e = new Date(d.getTime() + r.end_min * 60_000);
       if (e.getTime() <= from.getTime() || s.getTime() >= end) continue;
@@ -73,9 +80,27 @@ export function routineOccurrences(routines: Routine[], from: Date, to: Date): R
   return out;
 }
 
+/** 그 로컬 날짜에 이 시간표가 유효한가. null은 열려 있다는 뜻이다 */
+export function coversDay(t: Timetable, day: string): boolean {
+  if (t.deleted_at) return false;
+  if (t.active_from && day < t.active_from) return false;
+  if (t.active_to && day > t.active_to) return false;
+  return true;
+}
+
+/** 그 날 쓰이는 시간표. 없으면 null — 화면이 「없음」을 말할 수 있어야 한다 */
+export function activeTimetable(timetables: Timetable[], day = ymd(new Date())): Timetable | null {
+  return timetables.find((t) => coversDay(t, day)) ?? null;
+}
+
 /** 배치 계산이 쓰는 형태 — 가상 Block. 저장되지 않는다 */
-export function expandRoutines(routines: Routine[], from: Date, to: Date): Block[] {
-  return routineOccurrences(routines, from, to).map((o) =>
+export function expandRoutines(
+  routines: Routine[],
+  timetables: Timetable[],
+  from: Date,
+  to: Date,
+): Block[] {
+  return routineOccurrences(routines, timetables, from, to).map((o) =>
     virtualBlock(`${o.routine.id}:${o.day}`, o.routine.name, o.start, o.end),
   );
 }
@@ -190,6 +215,8 @@ export interface AutoScheduleInput {
   tasks: Task[];
   blocks: Block[];
   routines: Routine[];
+  /** 고정 일정이 그 날 유효한지는 시간표의 기간이 정한다 (3.8.1) */
+  timetables: Timetable[];
   sleep: SleepPattern;
   from: Date;
   to: Date;
@@ -225,6 +252,7 @@ export function autoSchedule(input: AutoScheduleInput): AutoScheduleResult {
     tasks,
     blocks,
     routines,
+    timetables,
     sleep,
     from,
     to,
@@ -241,7 +269,7 @@ export function autoSchedule(input: AutoScheduleInput): AutoScheduleResult {
 
   const busy: Block[] = [
     ...blocks.filter((b) => !b.deleted_at),
-    ...expandRoutines(routines, start, to),
+    ...expandRoutines(routines, timetables, start, to),
     ...sleepSpans(sleep, start, to),
   ];
   // 맞닿는 쪽만 깎는다. freeMin은 깎은 뒤로 센다 — 실제로 쓸 수 있는 시간이 그거다.

@@ -40,6 +40,7 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
     blocks,
     tasks,
     routines,
+    timetables,
     routineChecks,
     settings,
     snapDisabled,
@@ -141,7 +142,7 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
    */
   const busyByDay = useMemo(() => {
     const end = addDays(start, days);
-    const occ = routineOccurrences(routines, start, end);
+    const occ = routineOccurrences(routines, timetables, start, end);
     const sleeps = sleepSpans(settings.sleep, start, end);
     return dayStarts.map((d0) => {
       const d1 = addDays(d0, 1);
@@ -165,7 +166,7 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
           .filter((x) => x.bottom > x.top),
       };
     });
-  }, [routines, settings.sleep, dayStarts, start, days]);
+  }, [routines, timetables, settings.sleep, dayStarts, start, days]);
 
   const tickList = useMemo(() => ticks(start, AXIS_PX, 'day'), [start]);
 

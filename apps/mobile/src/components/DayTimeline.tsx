@@ -49,7 +49,8 @@ const isProposal = (id: string) => id.startsWith('p:');
 
 export function DayTimeline({ day, onPickSlot }: { day: Date; onPickSlot?: (at: Date) => void }) {
   const th = useTheme();
-  const { blocks, tasks, routines, routineChecks, settings, proposals, toggleRoutineCheck } = useStore();
+  const { blocks, tasks, routines, timetables, routineChecks, settings, proposals, toggleRoutineCheck } =
+    useStore();
   const dayStart = useMemo(() => {
     const d = new Date(day);
     d.setHours(0, 0, 0, 0);
@@ -102,7 +103,7 @@ export function DayTimeline({ day, onPickSlot }: { day: Date; onPickSlot?: (at: 
           bottom: Math.min(AXIS_H, timeToPx(new Date(b.end_at), dayStart, 'day')),
         }))
         .filter((x) => x.bottom > x.top),
-      routines: routineOccurrences(routines, dayStart, d1)
+      routines: routineOccurrences(routines, timetables, dayStart, d1)
         .filter((o) => within(o.start.getTime(), o.end.getTime()))
         .map((o) => ({
           o,
@@ -111,7 +112,7 @@ export function DayTimeline({ day, onPickSlot }: { day: Date; onPickSlot?: (at: 
         }))
         .filter((x) => x.bottom > x.top),
     };
-  }, [routines, settings.sleep, dayStart, dayEnd]);
+  }, [routines, timetables, settings.sleep, dayStart, dayEnd]);
 
   const today = ymd(new Date());
   const { placed, laneCount } = useMemo(() => layoutBlocks(visible, dayStart, 'day'), [visible, dayStart]);
