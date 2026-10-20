@@ -7,6 +7,9 @@ import 'expo-router/entry';
 
 import { registerWidgetTaskHandler } from 'react-native-android-widget';
 
+import { startWidgetPush } from './src/widgets/today';
 import { widgetTaskHandler } from './src/widgets/widget-task-handler';
 
 registerWidgetTaskHandler(widgetTaskHandler);
+// 앱에서 할 일이 바뀌면 홈 화면 위젯도 다시 그린다 (3.5)
+startWidgetPush();
