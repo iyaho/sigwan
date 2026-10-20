@@ -91,6 +91,7 @@ export function WeekStrip({
               ) : (
                 Array.from({ length: Math.min(3, Math.max(d.blockCount, 1)) }, (_, i) => (
                   <View
+                    // biome-ignore lint/suspicious/noArrayIndexKey: 개수만 뜻하는 점이다. 순서가 바뀔 일이 없다
                     key={i}
                     style={[
                       styles.dot,

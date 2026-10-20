@@ -10,7 +10,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "lint": "biome check .",
+    "lint": "biome lint .",
     "fmt": "biome check --write ."
   },
   "devDependencies": {

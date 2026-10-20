@@ -179,6 +179,7 @@ export function MonthGrid({ monthStart, compact = false }: { monthStart: Date; c
               const isToday = sameDay(d, now);
               const wk = d.getDay() === 0 || d.getDay() === 6;
               return (
+                // biome-ignore lint/a11y/noStaticElementInteractions: 리스트에서 끌어온 할 일을 받는 드롭 칸이다
                 <div
                   key={key}
                   className={`mcell${inMonth ? '' : ' out'}${isToday ? ' today' : ''}${wk ? ' weekend' : ''}`}

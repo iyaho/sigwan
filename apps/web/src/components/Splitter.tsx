@@ -38,9 +38,11 @@ export function Splitter({ axis, onMove, onCommit, onStep, onReset, label }: Pro
   );
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: <hr>은 포커스·드래그를 받지 못한다
     <div
       className={`splitter splitter-${axis}`}
       data-dragging={dragging}
+      // biome-ignore lint/a11y/useAriaPropsForRole: 비율은 부모가 갖고 있어 여기서 모른다. aria-valuenow는 그 값을 내려받을 때
       role="separator"
       aria-orientation={axis === 'x' ? 'vertical' : 'horizontal'}
       aria-label={label}

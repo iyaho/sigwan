@@ -321,7 +321,11 @@ class SqliteTagRepo implements TagRepo {
     const db = await getDb();
     const rows = await db.getAllAsync<{ task_id: string; tag_id: string }>('SELECT task_id, tag_id FROM task_tags');
     const m: Record<string, string[]> = {};
-    for (const r of rows) (m[r.task_id] ??= []).push(r.tag_id);
+    for (const r of rows) {
+      const list = m[r.task_id] ?? [];
+      list.push(r.tag_id);
+      m[r.task_id] = list;
+    }
     return m;
   }
 }

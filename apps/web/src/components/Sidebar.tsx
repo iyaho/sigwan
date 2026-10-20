@@ -235,8 +235,8 @@ function TagAdd({ onDone }: { onDone: () => void }) {
   return (
     <form className="tag-form" onSubmit={submit}>
       <ColorPicker value={color} onChange={setColor} />
-      {/* biome-ignore lint/a11y/noAutofocus: 이 칸 때문에 열린 폼이다 */}
       <input
+        // biome-ignore lint/a11y/noAutofocus: 이 칸 때문에 열린 폼이다
         autoFocus
         className="txt txt-sm"
         style={{ flex: 1, minWidth: 0 }}
