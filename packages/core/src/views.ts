@@ -23,6 +23,16 @@ export const MONTH_DAYS = 30;
 export const localDate = (d: Date = new Date()) => ymd(d);
 
 /**
+ * 「오늘」에 걸리는가 — day_of가 오늘이거나, 마감이 24시간 안(지난 것 포함)이다.
+ * 목록·진행도·위젯이 전부 이 하나로 판단한다. 완료 여부는 보지 않는다.
+ */
+export function isInToday(t: Task, now = new Date()): boolean {
+  return (
+    t.day_of === localDate(now) || (!!t.due_at && Date.parse(t.due_at) <= now.getTime() + 864e5)
+  );
+}
+
+/**
  * 사이드바 뷰 필터. TaskList와 store(revealTask)가 같은 판단을 해야 하므로 여기 하나만 둔다.
  * 두 곳에 복사하면 "보이는데 안 보인다고 판단하는" 어긋남이 생긴다.
  */
@@ -30,12 +40,7 @@ export function filterByView(tasks: Task[], view: ViewKey, now = new Date()): Ta
   const live = tasks.filter((t) => !t.deleted_at);
   switch (view) {
     case 'today':
-      return live.filter(
-        (t) =>
-          t.status !== 'done' &&
-          (t.day_of === localDate(now) ||
-            (!!t.due_at && Date.parse(t.due_at) <= now.getTime() + 864e5)),
-      );
+      return live.filter((t) => t.status !== 'done' && isInToday(t, now));
     case 'next7':
       return live.filter(
         (t) =>
@@ -78,12 +83,7 @@ export function viewProgress(
   let pool: Task[];
   switch (view) {
     case 'today':
-      pool = live.filter(
-        (t) =>
-          t.kind !== 'someday' &&
-          (t.day_of === localDate(now) ||
-            (!!t.due_at && Date.parse(t.due_at) <= now.getTime() + 864e5)),
-      );
+      pool = live.filter((t) => t.kind !== 'someday' && isInToday(t, now));
       break;
     case 'next7':
       pool = live.filter(

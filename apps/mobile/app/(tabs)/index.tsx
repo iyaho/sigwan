@@ -1,7 +1,7 @@
 import type { ViewKey } from '@sigwan/core';
 import { completedGroups, filterByView, matchesQuery, sortByPriority, viewProgress } from '@sigwan/core';
-import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddTaskSheet } from '@/components/AddTaskSheet';
@@ -44,6 +44,17 @@ export default function ScheduleScreen() {
   const [searching, setSearching] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const router = useRouter();
+
+  /**
+   * 위젯에서 할 일 제목을 누르면 sigwan:///?task=<id> 로 들어온다 (3.5).
+   * 연 뒤에 파라미터를 지운다 — 남겨두면 같은 할 일을 위젯에서 다시 눌렀을 때 값이 안 바뀌어 안 열린다.
+   */
+  const { task: linkedTask } = useLocalSearchParams<{ task?: string }>();
+  useEffect(() => {
+    if (!linkedTask) return;
+    select(linkedTask);
+    router.setParams({ task: undefined });
+  }, [linkedTask, select, router]);
 
   /** 뷰 → 태그 → 검색 순으로 좁힌다. 검색은 지금 보고 있는 뷰 안에서만 찾는다 */
   const narrowed = useMemo(() => {

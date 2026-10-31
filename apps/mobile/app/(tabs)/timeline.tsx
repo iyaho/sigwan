@@ -46,6 +46,7 @@ export default function TimelineScreen() {
   const nowY = ((now.getHours() * 60 + now.getMinutes()) * ZOOMS.day.pxPerMinute);
 
   // 열 때 지금 시각(오늘이 아니면 09:00)으로 스크롤
+  // biome-ignore lint/correctness/useExhaustiveDependencies: day — 다른 날로 넘기면 다시 스크롤한다
   useEffect(() => {
     const y = isToday ? nowY - 140 : 9 * 60 * ZOOMS.day.pxPerMinute - 40;
     const t = setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: false }), 50);

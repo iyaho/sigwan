@@ -323,6 +323,7 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
   }
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: 드롭·드래그를 받는 바탕이다
     <div
       className="tl-wrap cols-wrap"
       ref={wrapRef}
@@ -450,6 +451,8 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
                     ? { border: '1px dashed var(--border-strong)', color: 'var(--text-dim)', background: 'var(--bg-panel)', boxShadow: 'none' }
                     : {};
                   return (
+                    // biome-ignore lint/a11y/noStaticElementInteractions: 드래그로 옮기는 블록. 키보드로 블록을 옮기는 경로는 아직 없다
+                    // biome-ignore lint/a11y/useKeyWithClickEvents: 위와 같다
                     <div
                       key={item.id}
                       ref={(el) => {

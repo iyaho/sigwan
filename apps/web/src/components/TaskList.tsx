@@ -56,7 +56,8 @@ export function TaskList() {
     const m: Record<string, { n: number; done: number }> = {};
     for (const t of tasks) {
       if (!t.parent_id || t.deleted_at) continue;
-      const e = (m[t.parent_id] ??= { n: 0, done: 0 });
+      const e = m[t.parent_id] ?? { n: 0, done: 0 };
+      m[t.parent_id] = e;
       e.n++;
       if (t.status === 'done') e.done++;
     }
@@ -124,6 +125,8 @@ function Row({
 }) {
   const s = priorityScore(task);
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: 끌어서 타임라인에 놓는 줄이다. 키보드로 고르는 경로는 아직 없다
+    // biome-ignore lint/a11y/useKeyWithClickEvents: 위와 같다
     <div
       className="task"
       data-selected={selected}

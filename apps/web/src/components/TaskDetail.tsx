@@ -18,6 +18,7 @@ export function TaskDetail({ task, compact = false }: { task: Task; compact?: bo
   // M2 동기화가 붙으면 글자마다 outbox 항목이 된다. blur/Enter에서 한 번.
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? '');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: task.id — 다른 할 일을 열면 입력칸을 비운다
   useEffect(() => {
     setTitle(task.title);
     setNotes(task.notes ?? '');

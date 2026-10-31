@@ -152,6 +152,7 @@ export function MonthPicker({ value, onPick }: { value: string | null; onPick: (
               ...Array((new Date(year, month, 1).getDay() + 6) % 7).fill(null),
               ...Array.from({ length: new Date(year, month + 1, 0).getDate() }, (_, i) => i + 1),
             ].map((d: number | null, i) => {
+              // biome-ignore lint/suspicious/noArrayIndexKey: 앞 빈칸은 내용이 없어 자리 말고는 구분할 게 없다
               if (d === null) return <View key={`e${i}`} style={styles.cell} />;
               const key = ymd(new Date(year, month, d));
               const on = key === value;

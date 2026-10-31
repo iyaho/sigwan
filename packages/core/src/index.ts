@@ -10,3 +10,4 @@ export * from './calendar';
 export * from './views';
 export * from './fit';
 export * from './schedule';
+export * from './widget';

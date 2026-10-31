@@ -386,8 +386,8 @@ export function RoutineGrid() {
       {edit && (
         <div className="set-form">
           <div className="sub-row">
-            {/* biome-ignore lint/a11y/noAutofocus: 드래그가 끝나면 다음 동작은 이름 입력이다 */}
             <input
+              // biome-ignore lint/a11y/noAutofocus: 드래그가 끝나면 다음 동작은 이름 입력이다
               autoFocus={!edit.id}
               className="txt txt-sm"
               value={edit.name}

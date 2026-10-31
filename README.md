@@ -36,7 +36,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # pnpm.ps1 실행 차단 �
 git clone https://github.com/iyaho/sigwan.git
 cd sigwan
 pnpm install
-pnpm test          # 78개 통과하면 core가 정상이다
+pnpm test          # 전부 통과하면 core가 정상이다
 ```
 
 `pnpm test`가 통과하면 환경 확인은 끝이다. 웹만 할 사람은 2번으로, 앱까지 할 사람은 3번을 추가로 깐다.
@@ -94,7 +94,7 @@ setx PATH "$env:PATH;$env:LOCALAPPDATA\Android\Sdk\platform-tools;$env:LOCALAPPD
 
 **공통** — **Android Studio를 한 번 열어** 설치 마법사를 끝내고, SDK Manager에서 확인:
 
-- SDK Platform **36** (Android 16) — 명세 13.2가 `targetSdk 36`을 요구한다
+- SDK Platform **36** (Android 16)
 - Build-Tools, Platform-Tools, Emulator
 
 셋 다 나오면 준비 끝:
@@ -133,6 +133,15 @@ npx expo start --dev-client     # Metro만 띄우기
 ```
 
 **재빌드가 필요한 때는 네이티브가 바뀔 때뿐이다** — `expo install`로 패키지를 추가했거나, `app.json`을 고쳤거나, 위젯(M4) 작업을 할 때.
+
+### 3-4. 매일 쓰는 폰에 깔기 (스토어 없음)
+
+```bash
+cd apps/mobile
+npx expo run:android --variant release    # Metro 없이 도는 릴리스 APK가 연결된 폰에 깔린다
+```
+
+스토어에 올리지 않는다 (명세 13장). **지우고 다시 깔면 로컬 데이터가 같이 지워진다** — M2 동기화 전에는 덮어 설치만 한다.
 
 ---
 
@@ -178,7 +187,9 @@ npx expo start --dev-client     # Metro만 띄우기
 - 추가 폼·상세 시트는 웹과 같은 규칙(`core/taskDate.ts`)을 쓴다
 - 로컬 SQLite — 명세 5장 스키마 + **outbox**(7장 동기화 계약, 서버가 없어도 미리 지킨다)
 
-**아직 안 된 것** — 백엔드(M2, Supabase로 결정됨) · 위젯 3종(M4) · AI 할 일 생성(M4.5) · 한 줄 입력 파서 · 반복(RRULE) · 고정 일정·수면 입력과 자동 배치(core 규칙은 완성, 화면은 미착수)
+**위젯** — 「오늘」(4×2): 오늘 할 일 급한 순 + 완료 수, 체크박스로 완료, 제목 누르면 그 할 일이 열린다
+
+**아직 안 된 것** — 백엔드(M2, Supabase로 결정됨) · 위젯 나머지 둘(「다음 일정」·「급한 3개」) · AI 할 일 생성(M4.5) · 한 줄 입력 파서 · 반복(RRULE) · 고정 일정·수면 입력과 자동 배치(core 규칙은 완성, 화면은 미착수)
 
 ---
 
@@ -217,5 +228,8 @@ pnpm install                       # package.json이 바뀌었을 수 있다
 | `Permission denied (publickey)` | SSH 주소로 잡혀 있다. `git remote set-url origin https://github.com/iyaho/sigwan.git` |
 | `.git/index.lock: File exists` | `rm -f .git/*.lock` · PowerShell은 `Remove-Item .git\*.lock -Force` |
 | `! [rejected] ... fetch first` | 원격이 앞서 있다. `git pull --rebase` 후 다시 push |
+
+PR을 올리면 GitHub Actions가 `pnpm lint` · `pnpm typecheck` · `pnpm test`를 돌린다. 올리기 전에 같은 셋을 로컬에서 돌려볼 것.
+`pnpm lint`는 규칙 검사만 한다. 포맷(`pnpm fmt`)은 강제하지 않는다 — 한 번에 돌리면 리포 전체가 바뀌어 남의 브랜치와 충돌한다. 고친 파일만 `npx biome format --write <파일>`.
 
 브랜치는 `feat/<모듈번호>-<내용>`, `main`은 PR로만. 긴 브랜치 금지 (명세 16.9).
