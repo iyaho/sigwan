@@ -47,6 +47,8 @@ pnpm test          # 전부 통과하면 core가 정상이다
 
 ## 2. 웹 실행 — 1분
 
+설치 없이 써보려면 **https://iyaho.github.io/sigwan/** — `main`에 들어올 때마다 GitHub Actions(`.github/workflows/pages.yml`)가 다시 올린다.
+
 ```bash
 pnpm dev           # http://localhost:5173
 ```
