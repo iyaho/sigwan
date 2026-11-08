@@ -102,6 +102,7 @@ async function open() {
       is_all_day INTEGER NOT NULL DEFAULT 0,
       source TEXT NOT NULL DEFAULT 'manual',
       deleted_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT '',     -- 7장 LWW 기준. 레포가 쓸 때마다 찍는다
       rev INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_blocks_range ON blocks (user_id, start_at, end_at) WHERE deleted_at IS NULL;
@@ -113,6 +114,7 @@ async function open() {
       color TEXT NOT NULL,
       sort_order REAL NOT NULL DEFAULT 0,
       deleted_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT '',     -- 7장 LWW 기준. 레포가 쓸 때마다 찍는다
       rev INTEGER NOT NULL DEFAULT 0,
       UNIQUE (user_id, name)
     );
@@ -130,6 +132,7 @@ async function open() {
       active_from TEXT,
       active_to TEXT,
       deleted_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT '',     -- 7장 LWW 기준. 레포가 쓸 때마다 찍는다
       rev INTEGER NOT NULL DEFAULT 0
     );
 
@@ -147,6 +150,7 @@ async function open() {
       active_from TEXT,
       active_to TEXT,
       deleted_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT '',     -- 7장 LWW 기준. 레포가 쓸 때마다 찍는다
       rev INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_routines_live ON routines (user_id) WHERE deleted_at IS NULL;
@@ -171,6 +175,7 @@ async function open() {
       day TEXT NOT NULL,                         -- 로컬 날짜 YYYY-MM-DD (7장)
       checked_at TEXT NOT NULL,
       deleted_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT '',     -- 7장 LWW 기준. 레포가 쓸 때마다 찍는다
       rev INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_routine_checks_day ON routine_checks (user_id, day) WHERE deleted_at IS NULL;
@@ -189,6 +194,11 @@ async function open() {
   `);
   // CREATE TABLE IF NOT EXISTS는 이미 있는 테이블에 컬럼을 더해주지 않는다. 그건 ALTER다.
   await ensureColumn(db, 'routines', 'timetable_id', "timetable_id TEXT NOT NULL DEFAULT ''");
+  for (const t of ['blocks', 'tags', 'timetables', 'routines', 'routine_checks']) {
+    await ensureColumn(db, t, 'updated_at', "updated_at TEXT NOT NULL DEFAULT ''");
+    // 컬럼이 막 생긴 기기의 옛 행은 빈 값이다. 서버는 빈 시각을 못 받으므로 지금으로 채운다
+    await db.runAsync(`UPDATE ${t} SET updated_at = ? WHERE updated_at = ''`, new Date().toISOString());
+  }
   await migrateTimetables(db);
   await seedIfEmpty(db);
   return db;
@@ -225,7 +235,8 @@ async function migrateTimetables(db: SQLite.SQLiteDatabase) {
   await serial(() =>
     db.withTransactionAsync(async () => {
       await db.runAsync(
-        "INSERT OR REPLACE INTO timetables (id,user_id,name,active_from,active_to,deleted_at,rev) VALUES ('tt-legacy','local-user','기본',NULL,NULL,NULL,0)",
+        "INSERT OR REPLACE INTO timetables (id,user_id,name,active_from,active_to,deleted_at,updated_at,rev) VALUES ('tt-legacy','local-user','기본',NULL,NULL,NULL,?,0)",
+        new Date().toISOString(),
       );
       await db.runAsync("UPDATE routines SET timetable_id = 'tt-legacy' WHERE timetable_id = '' OR timetable_id IS NULL");
     }),
@@ -249,8 +260,8 @@ async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
     db.withTransactionAsync(async () => {
     for (const t of m.tags) {
       await db.runAsync(
-        'INSERT OR REPLACE INTO tags (id,user_id,name,color,sort_order,deleted_at,rev) VALUES (?,?,?,?,?,?,?)',
-        t.id, t.user_id, t.name, t.color, t.sort_order, t.deleted_at, t.rev,
+        'INSERT OR REPLACE INTO tags (id,user_id,name,color,sort_order,deleted_at,updated_at,rev) VALUES (?,?,?,?,?,?,?,?)',
+        t.id, t.user_id, t.name, t.color, t.sort_order, t.deleted_at, t.updated_at, t.rev,
       );
     }
     for (const t of m.tasks) {
@@ -267,8 +278,8 @@ async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
     }
     for (const b of m.blocks) {
       await db.runAsync(
-        'INSERT OR REPLACE INTO blocks (id,user_id,task_id,title,start_at,end_at,is_all_day,source,deleted_at,rev) VALUES (?,?,?,?,?,?,?,?,?,?)',
-        b.id, b.user_id, b.task_id, b.title, b.start_at, b.end_at, b.is_all_day ? 1 : 0, b.source, b.deleted_at, b.rev,
+        'INSERT OR REPLACE INTO blocks (id,user_id,task_id,title,start_at,end_at,is_all_day,source,deleted_at,updated_at,rev) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        b.id, b.user_id, b.task_id, b.title, b.start_at, b.end_at, b.is_all_day ? 1 : 0, b.source, b.deleted_at, b.updated_at, b.rev,
       );
     }
     for (const tt of m.taskTags) {

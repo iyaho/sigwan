@@ -2,6 +2,7 @@ import type {
   Block,
   BlockRange,
   BlockRepo,
+  OutboxEntry,
   Repos,
   Routine,
   RoutineCheck,
@@ -9,17 +10,19 @@ import type {
   RoutineRepo,
   Settings,
   SettingsRepo,
+  SyncTable,
   Tag,
   TagRepo,
   Task,
   TaskFilter,
   TaskRepo,
   TaskTag,
+  TaskTagsPayload,
   Timetable,
   TimetableRepo,
 } from '@sigwan/core';
 import { checkKey, makeMockData, nowIso } from '@sigwan/core';
-import Dexie, { type EntityTable } from 'dexie';
+import Dexie, { type EntityTable, type Table } from 'dexie';
 
 /**
  * M1의 로컬 저장. 스키마를 명세 5장 그대로 잡아두면 M3의 SQLite(Drizzle)로
@@ -39,6 +42,8 @@ class SigwanDb extends Dexie {
   routine_checks!: EntityTable<RoutineCheck, 'id'>;
   /** 사용자당 한 행이라 기본키가 user_id다 */
   settings!: EntityTable<Settings, 'user_id'>;
+  /** 7장 쓰기 기록. 앱 SQLite의 outbox와 같은 모양 (core/sync.ts) */
+  outbox!: EntityTable<OutboxEntry, 'seq'>;
 
   constructor() {
     super('sigwan');
@@ -80,6 +85,23 @@ class SigwanDb extends Dexie {
           rev: 0,
         });
         await tx.table('routines').bulkPut(rows.map((r) => ({ ...r, timetable_id: id })));
+      });
+    /**
+     * M2 준비. 쓰기마다 outbox에 한 줄 남기고(앱과 같은 모양), 모든 동기화 대상에 updated_at을 둔다.
+     * 할 일·설정 말고는 updated_at이 없었다 — 7장 LWW가 비교할 값이 없었던 것이다.
+     */
+    this.version(5)
+      .stores({ outbox: '++seq, table_name' })
+      .upgrade(async (tx) => {
+        const now = new Date().toISOString();
+        for (const t of ['blocks', 'tags', 'timetables', 'routines', 'routine_checks']) {
+          await tx
+            .table(t)
+            .toCollection()
+            .modify((r: { updated_at?: string }) => {
+              if (!r.updated_at) r.updated_at = now;
+            });
+        }
       });
   }
 }
@@ -124,6 +146,24 @@ export async function resetAll(): Promise<void> {
   await seedIfEmpty();
 }
 
+/**
+ * 쓰기 한 건 = 행 저장 + outbox 한 줄. 한 트랜잭션이라 "저장은 됐는데 기록이 없어 서버에 영영 안 올라가는"
+ * 상태가 생기지 않는다 (7장). 삭제도 툼스톤 행을 쓰는 것이라 op는 늘 upsert다.
+ */
+async function write<R>(table: Table, name: SyncTable, row: R, rowId: string): Promise<R> {
+  await db.transaction('rw', table, db.outbox, async () => {
+    await table.put(row);
+    await db.outbox.add({
+      table_name: name,
+      row_id: rowId,
+      op: 'upsert',
+      payload: JSON.stringify(row),
+      created_at: nowIso(),
+    } as OutboxEntry);
+  });
+  return row;
+}
+
 const arr = <T>(v: T | T[] | undefined): T[] | undefined =>
   v === undefined ? undefined : Array.isArray(v) ? v : [v];
 
@@ -160,19 +200,18 @@ class LocalTaskRepo implements TaskRepo {
 
   async upsert(task: Task) {
     const next = { ...task, user_id: USER_ID, updated_at: nowIso(), rev: task.rev + 1 };
-    await db.tasks.put(next);
-    return next;
+    return write(db.tasks, 'tasks', next, next.id);
   }
 
   async upsertMany(tasks: Task[]) {
-    await db.tasks.bulkPut(tasks.map((t) => ({ ...t, user_id: USER_ID })));
+    for (const t of tasks) await this.upsert(t);
   }
 
   /** 툼스톤 — 물리 삭제하지 않는다 (7장) */
   async remove(id: string) {
     const t = await db.tasks.get(id);
     if (!t) return;
-    await db.tasks.put({ ...t, deleted_at: nowIso(), updated_at: nowIso(), rev: t.rev + 1 });
+    await this.upsert({ ...t, deleted_at: nowIso() });
   }
 
   async syncSince(rev: number) {
@@ -191,14 +230,13 @@ class LocalBlockRepo implements BlockRepo {
     return (await db.blocks.where('task_id').equals(taskId).toArray()).filter((b) => !b.deleted_at);
   }
   async upsert(block: Block) {
-    const next = { ...block, user_id: USER_ID, rev: block.rev + 1 };
-    await db.blocks.put(next);
-    return next;
+    const next = { ...block, user_id: USER_ID, updated_at: nowIso(), rev: block.rev + 1 };
+    return write(db.blocks, 'blocks', next, next.id);
   }
   async remove(id: string) {
     const b = await db.blocks.get(id);
     if (!b) return;
-    await db.blocks.put({ ...b, deleted_at: nowIso(), rev: b.rev + 1 });
+    await this.upsert({ ...b, deleted_at: nowIso() });
   }
 }
 
@@ -212,20 +250,29 @@ class LocalTagRepo implements TagRepo {
     return rows[0] ?? null;
   }
   async upsert(tag: Tag) {
-    const next = { ...tag, user_id: USER_ID, rev: tag.rev + 1 };
-    await db.tags.put(next);
-    return next;
+    const next = { ...tag, user_id: USER_ID, updated_at: nowIso(), rev: tag.rev + 1 };
+    return write(db.tags, 'tags', next, next.id);
   }
   async remove(id: string) {
     const t = await db.tags.get(id);
     if (!t) return;
-    await db.tags.put({ ...t, deleted_at: nowIso(), rev: t.rev + 1 });
+    await this.upsert({ ...t, deleted_at: nowIso() });
   }
   async setTaskTags(taskId: string, tagIds: string[]) {
-    await db.task_tags.where('task_id').equals(taskId).delete();
-    await db.task_tags.bulkAdd(
-      tagIds.map((tag_id) => ({ id: `${taskId}:${tag_id}`, task_id: taskId, tag_id })),
-    );
+    const payload: TaskTagsPayload = { task_id: taskId, tag_ids: tagIds, updated_at: nowIso() };
+    await db.transaction('rw', db.task_tags, db.outbox, async () => {
+      await db.task_tags.where('task_id').equals(taskId).delete();
+      await db.task_tags.bulkAdd(
+        tagIds.map((tag_id) => ({ id: `${taskId}:${tag_id}`, task_id: taskId, tag_id })),
+      );
+      await db.outbox.add({
+        table_name: 'task_tags',
+        row_id: taskId,
+        op: 'upsert',
+        payload: JSON.stringify(payload),
+        created_at: nowIso(),
+      } as OutboxEntry);
+    });
   }
   async tagsOf(taskId: string) {
     const links = await db.task_tags.where('task_id').equals(taskId).toArray();
@@ -243,15 +290,14 @@ class LocalRoutineRepo implements RoutineRepo {
       .sort((a, b) => a.start_min - b.start_min || a.name.localeCompare(b.name));
   }
   async upsert(r: Routine) {
-    const next = { ...r, user_id: USER_ID, rev: r.rev + 1 };
-    await db.routines.put(next);
-    return next;
+    const next = { ...r, user_id: USER_ID, updated_at: nowIso(), rev: r.rev + 1 };
+    return write(db.routines, 'routines', next, next.id);
   }
   async remove(id: string) {
     const r = await db.routines.get(id);
     if (!r) return;
     // 툼스톤 — 지운 수업이 지난 주 화면에서까지 사라지면 기록이 틀어진다 (7장)
-    await db.routines.put({ ...r, deleted_at: nowIso(), rev: r.rev + 1 });
+    await this.upsert({ ...r, deleted_at: nowIso() });
   }
 }
 
@@ -262,14 +308,13 @@ class LocalTimetableRepo implements TimetableRepo {
       .sort((a, b) => (b.active_from ?? '').localeCompare(a.active_from ?? '') || a.name.localeCompare(b.name));
   }
   async upsert(t: Timetable) {
-    const next = { ...t, user_id: USER_ID, rev: t.rev + 1 };
-    await db.timetables.put(next);
-    return next;
+    const next = { ...t, user_id: USER_ID, updated_at: nowIso(), rev: t.rev + 1 };
+    return write(db.timetables, 'timetables', next, next.id);
   }
   async remove(id: string) {
     const t = await db.timetables.get(id);
     if (!t) return;
-    await db.timetables.put({ ...t, deleted_at: nowIso(), rev: t.rev + 1 });
+    await this.upsert({ ...t, deleted_at: nowIso() });
   }
 }
 
@@ -286,7 +331,13 @@ class LocalRoutineCheckRepo implements RoutineCheckRepo {
     const id = checkKey(routineId, day);
     const cur = await db.routine_checks.get(id);
     const next: RoutineCheck = cur
-      ? { ...cur, checked_at: nowIso(), deleted_at: cur.deleted_at ? null : nowIso(), rev: cur.rev + 1 }
+      ? {
+          ...cur,
+          checked_at: nowIso(),
+          deleted_at: cur.deleted_at ? null : nowIso(),
+          updated_at: nowIso(),
+          rev: cur.rev + 1,
+        }
       : {
           id,
           user_id: USER_ID,
@@ -294,10 +345,10 @@ class LocalRoutineCheckRepo implements RoutineCheckRepo {
           day,
           checked_at: nowIso(),
           deleted_at: null,
+          updated_at: nowIso(),
           rev: 0,
         };
-    await db.routine_checks.put(next);
-    return next;
+    return write(db.routine_checks, 'routine_checks', next, next.id);
   }
 }
 
@@ -307,8 +358,7 @@ class LocalSettingsRepo implements SettingsRepo {
   }
   async save(s: Settings) {
     const next = { ...s, user_id: USER_ID, updated_at: nowIso(), rev: s.rev + 1 };
-    await db.settings.put(next);
-    return next;
+    return write(db.settings, 'settings', next, next.user_id);
   }
 }
 

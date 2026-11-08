@@ -2,6 +2,7 @@ import type {
   Block,
   BlockRange,
   BlockRepo,
+  OutboxEntry,
   Repos,
   Routine,
   RoutineCheck,
@@ -9,11 +10,13 @@ import type {
   RoutineRepo,
   Settings,
   SettingsRepo,
+  SyncTable,
   Tag,
   TagRepo,
   Task,
   TaskFilter,
   TaskRepo,
+  TaskTagsPayload,
   Timetable,
   TimetableRepo,
 } from '@sigwan/core';
@@ -79,6 +82,7 @@ function rowToBlock(r: Row): Block {
     is_all_day: b(r.is_all_day),
     source: r.source as Block['source'],
     deleted_at: (r.deleted_at as string | null) ?? null,
+    updated_at: (r.updated_at as string | null) ?? '',
     rev: r.rev as number,
   };
 }
@@ -91,6 +95,7 @@ function rowToTag(r: Row): Tag {
     color: r.color as string,
     sort_order: r.sort_order as number,
     deleted_at: (r.deleted_at as string | null) ?? null,
+    updated_at: (r.updated_at as string | null) ?? '',
     rev: r.rev as number,
   };
 }
@@ -111,6 +116,7 @@ function rowToTimetable(r: Row): Timetable {
     active_from: (r.active_from as string | null) ?? null,
     active_to: (r.active_to as string | null) ?? null,
     deleted_at: (r.deleted_at as string | null) ?? null,
+    updated_at: (r.updated_at as string | null) ?? '',
     rev: r.rev as number,
   };
 }
@@ -126,6 +132,7 @@ function rowToRoutine(r: Row): Routine {
     end_min: r.end_min as number,
     color: r.color as string,
     deleted_at: (r.deleted_at as string | null) ?? null,
+    updated_at: (r.updated_at as string | null) ?? '',
     rev: r.rev as number,
   };
 }
@@ -138,13 +145,14 @@ function rowToCheck(r: Row): RoutineCheck {
     day: r.day as string,
     checked_at: r.checked_at as string,
     deleted_at: (r.deleted_at as string | null) ?? null,
+    updated_at: (r.updated_at as string | null) ?? '',
     rev: r.rev as number,
   };
 }
 
 type Tx = SQLiteDatabase;
 
-async function outbox(db: Tx, table: string, rowId: string, op: 'upsert' | 'delete', payload: unknown) {
+async function outbox(db: Tx, table: SyncTable, rowId: string, op: OutboxEntry['op'], payload: unknown) {
   await db.runAsync(
     'INSERT INTO outbox (table_name,row_id,op,payload,created_at) VALUES (?,?,?,?,?)',
     table, rowId, op, JSON.stringify(payload), nowIso(),
@@ -253,11 +261,11 @@ class SqliteBlockRepo implements BlockRepo {
   }
   async upsert(blk: Block) {
     const db = await getDb();
-    const next: Block = { ...blk, user_id: USER_ID, rev: blk.rev + 1 };
+    const next: Block = { ...blk, user_id: USER_ID, updated_at: nowIso(), rev: blk.rev + 1 };
     await withWrite(async (db) => {
       await db.runAsync(
-        'INSERT OR REPLACE INTO blocks (id,user_id,task_id,title,start_at,end_at,is_all_day,source,deleted_at,rev) VALUES (?,?,?,?,?,?,?,?,?,?)',
-        next.id, next.user_id, next.task_id, next.title, next.start_at, next.end_at, next.is_all_day ? 1 : 0, next.source, next.deleted_at, next.rev,
+        'INSERT OR REPLACE INTO blocks (id,user_id,task_id,title,start_at,end_at,is_all_day,source,deleted_at,updated_at,rev) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        next.id, next.user_id, next.task_id, next.title, next.start_at, next.end_at, next.is_all_day ? 1 : 0, next.source, next.deleted_at, next.updated_at, next.rev,
       );
       await outbox(db, 'blocks', next.id, 'upsert', next);
     });
@@ -284,11 +292,11 @@ class SqliteTagRepo implements TagRepo {
   }
   async upsert(tag: Tag) {
     const db = await getDb();
-    const next: Tag = { ...tag, user_id: USER_ID, rev: tag.rev + 1 };
+    const next: Tag = { ...tag, user_id: USER_ID, updated_at: nowIso(), rev: tag.rev + 1 };
     await withWrite(async (db) => {
       await db.runAsync(
-        'INSERT OR REPLACE INTO tags (id,user_id,name,color,sort_order,deleted_at,rev) VALUES (?,?,?,?,?,?,?)',
-        next.id, next.user_id, next.name, next.color, next.sort_order, next.deleted_at, next.rev,
+        'INSERT OR REPLACE INTO tags (id,user_id,name,color,sort_order,deleted_at,updated_at,rev) VALUES (?,?,?,?,?,?,?,?)',
+        next.id, next.user_id, next.name, next.color, next.sort_order, next.deleted_at, next.updated_at, next.rev,
       );
       await outbox(db, 'tags', next.id, 'upsert', next);
     });
@@ -305,7 +313,8 @@ class SqliteTagRepo implements TagRepo {
     await withWrite(async (db) => {
       await db.runAsync('DELETE FROM task_tags WHERE task_id = ?', taskId);
       for (const tagId of tagIds) await db.runAsync('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?,?)', taskId, tagId);
-      await outbox(db, 'task_tags', taskId, 'upsert', { task_id: taskId, tag_ids: tagIds });
+      const payload: TaskTagsPayload = { task_id: taskId, tag_ids: tagIds, updated_at: nowIso() };
+      await outbox(db, 'task_tags', taskId, 'upsert', payload);
     });
   }
   async tagsOf(taskId: string) {
@@ -340,11 +349,11 @@ class SqliteTimetableRepo implements TimetableRepo {
     return rows.map(rowToTimetable);
   }
   async upsert(t: Timetable) {
-    const next: Timetable = { ...t, user_id: USER_ID, rev: t.rev + 1 };
+    const next: Timetable = { ...t, user_id: USER_ID, updated_at: nowIso(), rev: t.rev + 1 };
     await withWrite(async (db) => {
       await db.runAsync(
-        'INSERT OR REPLACE INTO timetables (id,user_id,name,active_from,active_to,deleted_at,rev) VALUES (?,?,?,?,?,?,?)',
-        next.id, next.user_id, next.name, next.active_from, next.active_to, next.deleted_at, next.rev,
+        'INSERT OR REPLACE INTO timetables (id,user_id,name,active_from,active_to,deleted_at,updated_at,rev) VALUES (?,?,?,?,?,?,?,?)',
+        next.id, next.user_id, next.name, next.active_from, next.active_to, next.deleted_at, next.updated_at, next.rev,
       );
       await outbox(db, 'timetables', next.id, 'upsert', next);
     });
@@ -369,13 +378,13 @@ class SqliteRoutineRepo implements RoutineRepo {
     return rows.map(rowToRoutine);
   }
   async upsert(r: Routine) {
-    const next: Routine = { ...r, user_id: USER_ID, rev: r.rev + 1 };
+    const next: Routine = { ...r, user_id: USER_ID, updated_at: nowIso(), rev: r.rev + 1 };
     await withWrite(async (db) => {
       await db.runAsync(
-        `INSERT OR REPLACE INTO routines (id,user_id,timetable_id,name,weekdays,start_min,end_min,color,deleted_at,rev)
-         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT OR REPLACE INTO routines (id,user_id,timetable_id,name,weekdays,start_min,end_min,color,deleted_at,updated_at,rev)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
         next.id, next.user_id, next.timetable_id, next.name, fromWeekdays(next.weekdays),
-        next.start_min, next.end_min, next.color, next.deleted_at, next.rev,
+        next.start_min, next.end_min, next.color, next.deleted_at, next.updated_at, next.rev,
       );
       await outbox(db, 'routines', next.id, 'upsert', next);
     });
@@ -406,12 +415,12 @@ class SqliteRoutineCheckRepo implements RoutineCheckRepo {
     const cur = await db.getFirstAsync<Row>('SELECT * FROM routine_checks WHERE id = ?', id);
     const prev = cur ? rowToCheck(cur) : null;
     const next: RoutineCheck = prev
-      ? { ...prev, checked_at: nowIso(), deleted_at: prev.deleted_at ? null : nowIso(), rev: prev.rev + 1 }
-      : { id, user_id: USER_ID, routine_id: routineId, day, checked_at: nowIso(), deleted_at: null, rev: 0 };
+      ? { ...prev, checked_at: nowIso(), deleted_at: prev.deleted_at ? null : nowIso(), updated_at: nowIso(), rev: prev.rev + 1 }
+      : { id, user_id: USER_ID, routine_id: routineId, day, checked_at: nowIso(), deleted_at: null, updated_at: nowIso(), rev: 0 };
     await withWrite(async (tx) => {
       await tx.runAsync(
-        'INSERT OR REPLACE INTO routine_checks (id,user_id,routine_id,day,checked_at,deleted_at,rev) VALUES (?,?,?,?,?,?,?)',
-        next.id, next.user_id, next.routine_id, next.day, next.checked_at, next.deleted_at, next.rev,
+        'INSERT OR REPLACE INTO routine_checks (id,user_id,routine_id,day,checked_at,deleted_at,updated_at,rev) VALUES (?,?,?,?,?,?,?,?)',
+        next.id, next.user_id, next.routine_id, next.day, next.checked_at, next.deleted_at, next.updated_at, next.rev,
       );
       await outbox(tx, 'routine_checks', next.id, 'upsert', next);
     });

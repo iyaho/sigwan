@@ -100,6 +100,7 @@ export function DayColumns({ start, days }: { start: Date; days: number }) {
         is_all_day: false,
         source: 'drag',
         deleted_at: null,
+        updated_at: p.start,
         rev: 0,
       })),
     [proposals],

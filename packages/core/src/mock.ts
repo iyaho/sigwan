@@ -96,6 +96,7 @@ export function makeMockData(now: Date = new Date(), seed = 20251895): MockData 
     color,
     sort_order: i,
     deleted_at: null,
+    updated_at: createdAt,
     rev: 0,
   }));
 
@@ -233,6 +234,7 @@ export function makeMockData(now: Date = new Date(), seed = 20251895): MockData 
       is_all_day: false,
       source: rnd() < 0.5 ? 'drag' : 'manual',
       deleted_at: null,
+      updated_at: createdAt,
       rev: 0,
     });
   }

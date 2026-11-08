@@ -56,6 +56,7 @@ const block = (id: string, s: string, e: string): Block => ({
   is_all_day: false,
   source: 'manual',
   deleted_at: null,
+  updated_at: '2026-09-01T00:00:00.000Z',
   rev: 0,
 });
 

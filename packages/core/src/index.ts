@@ -1,5 +1,6 @@
 export * from './types';
 export * from './score';
+export * from './sync';
 export * from './timeline';
 export * from './repo';
 export * from './id';

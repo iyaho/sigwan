@@ -91,6 +91,8 @@ export const BlockSchema = z
     is_all_day: z.boolean().default(false),
     source: BlockSource.default('manual'),
     deleted_at: iso.nullable().default(null),
+    /** 7장 LWW 기준. 레포가 쓸 때마다 찍는다 — 화면이 넣은 값은 덮인다 */
+    updated_at: iso,
     rev: z.number().int().default(0),
   })
   .refine((b) => new Date(b.end_at) > new Date(b.start_at), {
@@ -110,6 +112,8 @@ export const TagSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   sort_order: z.number().default(0),
   deleted_at: iso.nullable().default(null),
+  /** 7장 LWW 기준. 레포가 쓸 때마다 찍는다 — 화면이 넣은 값은 덮인다 */
+  updated_at: iso,
   rev: z.number().int().default(0),
 });
 export type Tag = z.infer<typeof TagSchema>;
@@ -152,6 +156,8 @@ export const RoutineSchema = z.object({
   end_min: z.number().int().min(1).max(1440),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   deleted_at: iso.nullable().default(null),
+  /** 7장 LWW 기준. 레포가 쓸 때마다 찍는다 — 화면이 넣은 값은 덮인다 */
+  updated_at: iso,
   rev: z.number().int().default(0),
 });
 export type Routine = z.infer<typeof RoutineSchema>;
@@ -173,6 +179,8 @@ export const TimetableSchema = z.object({
   active_from: localDate.nullable().default(null),
   active_to: localDate.nullable().default(null),
   deleted_at: iso.nullable().default(null),
+  /** 7장 LWW 기준. 레포가 쓸 때마다 찍는다 — 화면이 넣은 값은 덮인다 */
+  updated_at: iso,
   rev: z.number().int().default(0),
 });
 export type Timetable = z.infer<typeof TimetableSchema>;
@@ -224,6 +232,8 @@ export const RoutineCheckSchema = z.object({
   day: localDate,
   checked_at: iso,
   deleted_at: iso.nullable().default(null),
+  /** 7장 LWW 기준. 레포가 쓸 때마다 찍는다 — 화면이 넣은 값은 덮인다 */
+  updated_at: iso,
   rev: z.number().int().default(0),
 });
 export type RoutineCheck = z.infer<typeof RoutineCheckSchema>;

@@ -91,7 +91,7 @@ interface State {
   saveSleep: (sleep: SleepPattern) => Promise<void>;
   setGapMin: (min: number) => Promise<void>;
   saveRoutine: (r: Routine) => Promise<void>;
-  addRoutine: (draft: Omit<Routine, 'id' | 'user_id' | 'deleted_at' | 'rev'>) => Promise<string>;
+  addRoutine: (draft: Omit<Routine, 'id' | 'user_id' | 'deleted_at' | 'updated_at' | 'rev'>) => Promise<string>;
   removeRoutine: (id: string) => Promise<void>;
   selectTimetable: (id: string) => void;
   saveTimetable: (t: Timetable) => Promise<void>;
@@ -122,6 +122,7 @@ async function makeDefaultTimetable() {
     active_from: null,
     active_to: null,
     deleted_at: null,
+    updated_at: nowIso(),
     rev: 0,
   });
 }
@@ -311,6 +312,7 @@ export const useStore = create<State>((set, get) => ({
       is_all_day: false,
       source: 'drag',
       deleted_at: null,
+      updated_at: nowIso(),
       rev: 0,
     });
     return fit;
@@ -351,6 +353,7 @@ export const useStore = create<State>((set, get) => ({
       color,
       sort_order: get().tags.length,
       deleted_at: null,
+      updated_at: nowIso(),
       rev: 0,
     });
     set((s) => ({ tags: [...s.tags, tag] }));
@@ -443,6 +446,7 @@ export const useStore = create<State>((set, get) => ({
       active_from: from,
       active_to: null,
       deleted_at: null,
+      updated_at: nowIso(),
       rev: 0,
     });
     set({ currentTimetableId: id });
@@ -476,7 +480,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async addRoutine(draft) {
-    const r: Routine = { ...draft, id: newId(), user_id: 'local-user', deleted_at: null, rev: 0 };
+    const r: Routine = { ...draft, id: newId(), user_id: 'local-user', deleted_at: null, updated_at: nowIso(), rev: 0 };
     await get().saveRoutine(r);
     return r.id;
   },
