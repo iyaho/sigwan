@@ -152,10 +152,17 @@ function rowToCheck(r: Row): RoutineCheck {
 
 type Tx = SQLiteDatabase;
 
+export const CURSOR_KEY = 'sync_cursor';
+
+/**
+ * outbox 한 줄. base_rev는 지금의 커서 — "서버 것을 여기까지 받아 둔 상태에서 고쳤다"는 표시다.
+ * 서버는 이걸로 최신을 보고 고친 것인지, 모르고 동시에 고친 충돌인지 가른다 (core/sync.ts)
+ */
 async function outbox(db: Tx, table: SyncTable, rowId: string, op: OutboxEntry['op'], payload: unknown) {
+  const cur = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', CURSOR_KEY);
   await db.runAsync(
-    'INSERT INTO outbox (table_name,row_id,op,payload,created_at) VALUES (?,?,?,?,?)',
-    table, rowId, op, JSON.stringify(payload), nowIso(),
+    'INSERT INTO outbox (table_name,row_id,op,payload,created_at,base_rev) VALUES (?,?,?,?,?,?)',
+    table, rowId, op, JSON.stringify(payload), nowIso(), cur ? Number(cur.value) : 0,
   );
 }
 

@@ -187,7 +187,8 @@ async function open() {
       row_id TEXT NOT NULL,
       op TEXT NOT NULL CHECK (op IN ('upsert','delete')),
       payload TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      base_rev INTEGER                           -- 기록할 때의 동기화 커서 (core/sync.ts)
     );
 
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -199,6 +200,7 @@ async function open() {
     // 컬럼이 막 생긴 기기의 옛 행은 빈 값이다. 서버는 빈 시각을 못 받으므로 지금으로 채운다
     await db.runAsync(`UPDATE ${t} SET updated_at = ? WHERE updated_at = ''`, new Date().toISOString());
   }
+  await ensureColumn(db, 'outbox', 'base_rev', 'base_rev INTEGER');
   await migrateTimetables(db);
   await seedIfEmpty(db);
   return db;

@@ -44,6 +44,8 @@ class SigwanDb extends Dexie {
   settings!: EntityTable<Settings, 'user_id'>;
   /** 7장 쓰기 기록. 앱 SQLite의 outbox와 같은 모양 (core/sync.ts) */
   outbox!: EntityTable<OutboxEntry, 'seq'>;
+  /** 동기화 커서 같은 기기 전용 값. 서버로 가지 않는다 */
+  meta!: EntityTable<{ key: string; value: string }, 'key'>;
 
   constructor() {
     super('sigwan');
@@ -91,7 +93,7 @@ class SigwanDb extends Dexie {
      * 할 일·설정 말고는 updated_at이 없었다 — 7장 LWW가 비교할 값이 없었던 것이다.
      */
     this.version(5)
-      .stores({ outbox: '++seq, table_name' })
+      .stores({ outbox: '++seq, table_name', meta: 'key' })
       .upgrade(async (tx) => {
         const now = new Date().toISOString();
         for (const t of ['blocks', 'tags', 'timetables', 'routines', 'routine_checks']) {
@@ -151,17 +153,29 @@ export async function resetAll(): Promise<void> {
  * 상태가 생기지 않는다 (7장). 삭제도 툼스톤 행을 쓰는 것이라 op는 늘 upsert다.
  */
 async function write<R>(table: Table, name: SyncTable, row: R, rowId: string): Promise<R> {
-  await db.transaction('rw', table, db.outbox, async () => {
+  await db.transaction('rw', table, db.outbox, db.meta, async () => {
     await table.put(row);
-    await db.outbox.add({
-      table_name: name,
-      row_id: rowId,
-      op: 'upsert',
-      payload: JSON.stringify(row),
-      created_at: nowIso(),
-    } as OutboxEntry);
+    await logOutbox(name, rowId, row);
   });
   return row;
+}
+
+export const CURSOR_KEY = 'sync_cursor';
+
+/**
+ * outbox 한 줄. base_rev는 지금의 커서 — "서버 것을 여기까지 받아 둔 상태에서 고쳤다"는 표시다.
+ * 서버는 이걸로 최신을 보고 고친 것인지, 모르고 동시에 고친 충돌인지 가른다 (core/sync.ts)
+ */
+async function logOutbox(name: SyncTable, rowId: string, payload: unknown) {
+  const cursor = await db.meta.get(CURSOR_KEY);
+  await db.outbox.add({
+    table_name: name,
+    row_id: rowId,
+    op: 'upsert',
+    payload: JSON.stringify(payload),
+    created_at: nowIso(),
+    base_rev: cursor ? Number(cursor.value) : 0,
+  } as OutboxEntry);
 }
 
 const arr = <T>(v: T | T[] | undefined): T[] | undefined =>
@@ -260,18 +274,12 @@ class LocalTagRepo implements TagRepo {
   }
   async setTaskTags(taskId: string, tagIds: string[]) {
     const payload: TaskTagsPayload = { task_id: taskId, tag_ids: tagIds, updated_at: nowIso() };
-    await db.transaction('rw', db.task_tags, db.outbox, async () => {
+    await db.transaction('rw', db.task_tags, db.outbox, db.meta, async () => {
       await db.task_tags.where('task_id').equals(taskId).delete();
       await db.task_tags.bulkAdd(
         tagIds.map((tag_id) => ({ id: `${taskId}:${tag_id}`, task_id: taskId, tag_id })),
       );
-      await db.outbox.add({
-        table_name: 'task_tags',
-        row_id: taskId,
-        op: 'upsert',
-        payload: JSON.stringify(payload),
-        created_at: nowIso(),
-      } as OutboxEntry);
+      await logOutbox('task_tags', taskId, payload);
     });
   }
   async tagsOf(taskId: string) {
