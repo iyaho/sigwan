@@ -1,4 +1,12 @@
-import { makeMockData } from '@sigwan/core';
+import type { Block, DemoIds, Tag, Task, TaskTag } from '@sigwan/core';
+import {
+  DEMO_IDS_KEY,
+  DEMO_STATE_KEY,
+  demoIdsOf,
+  demoRowsToDelete,
+  detectLegacyDemo,
+  makeMockData,
+} from '@sigwan/core';
 import * as SQLite from 'expo-sqlite';
 
 /**
@@ -252,10 +260,24 @@ async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
    * 같은 이름의 태그를 또 넣게 되고 UNIQUE(user_id, name)에 걸린다.
    * 게다가 아래 INSERT가 맨 INSERT였어서 그대로 예외가 됐다 — 지금은 OR REPLACE다.
    */
+  // 예시를 이미 넣었거나 지웠다 — 다시 넣지 않는다 (core/demo.ts)
+  const state = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', DEMO_STATE_KEY);
+  if (state) return;
+
   const row = await db.getFirstAsync<{ n: number }>(
     'SELECT (SELECT COUNT(*) FROM tasks) + (SELECT COUNT(*) FROM tags) AS n',
   );
-  if ((row?.n ?? 0) > 0) return;
+  if ((row?.n ?? 0) > 0) {
+    // 예시 id를 적어 두기 전에 깔린 기기. 판별에 쓰는 열만 읽는다
+    const ids = detectLegacyDemo({
+      tasks: await db.getAllAsync<Task>('SELECT id, created_at, parent_id FROM tasks'),
+      blocks: await db.getAllAsync<Block>('SELECT id, task_id, title FROM blocks'),
+      tags: await db.getAllAsync<Tag>('SELECT id, name FROM tags'),
+      taskTags: await db.getAllAsync<TaskTag>('SELECT task_id, tag_id FROM task_tags'),
+    });
+    await serial(() => markDemo(db, ids, ids.tasks.length ? 'shown' : 'cleared'));
+    return;
+  }
   const m = makeMockData(new Date());
   // open() 안에서 불리므로 withWrite(→getDb)를 쓰면 자기 자신을 기다려 교착된다
   await serial(() =>
@@ -288,9 +310,55 @@ async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
       await db.runAsync('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?,?)', tt.task_id, tt.tag_id);
     }
       await db.runAsync("INSERT OR REPLACE INTO meta (key,value) VALUES ('seeded_at', ?)", new Date().toISOString());
+      await markDemo(db, demoIdsOf(m), 'shown');
     }),
   );
 }
+
+async function markDemo(db: SQLite.SQLiteDatabase, ids: DemoIds, state: 'shown' | 'cleared') {
+  await db.runAsync('INSERT OR REPLACE INTO meta (key,value) VALUES (?,?)', DEMO_IDS_KEY, JSON.stringify(ids));
+  await db.runAsync('INSERT OR REPLACE INTO meta (key,value) VALUES (?,?)', DEMO_STATE_KEY, state);
+}
+
+const qs = (n: number) => Array(n).fill('?').join(',');
+
+/**
+ * 예시 데이터를 치운다 — 직접 뭔가를 처음 등록할 때, 그리고 로그인할 때.
+ * 예시를 고친 outbox 기록도 같이 지운다 — 예시는 서버로 가면 안 된다.
+ * 지운 id를 돌려준다(화면 상태에서도 빼야 한다). 이미 치웠으면 null.
+ */
+export async function clearDemo(): Promise<DemoIds | null> {
+  return withWrite(async (db) => {
+    const st = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', DEMO_STATE_KEY);
+    if (st?.value !== 'shown') return null;
+    const raw = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', DEMO_IDS_KEY);
+    const ids: DemoIds = raw ? JSON.parse(raw.value) : { tasks: [], blocks: [], tags: [] };
+    const del = demoRowsToDelete(ids, {
+      tasks: await db.getAllAsync<Task>('SELECT id, parent_id FROM tasks'),
+      blocks: await db.getAllAsync<Block>('SELECT id, task_id FROM blocks'),
+      taskTags: await db.getAllAsync<TaskTag>('SELECT task_id, tag_id FROM task_tags'),
+    });
+    const { tasks, blocks, tags } = del;
+    await db.runAsync(`DELETE FROM tasks WHERE id IN (${qs(tasks.length)})`, ...tasks);
+    await db.runAsync(`DELETE FROM blocks WHERE id IN (${qs(blocks.length)})`, ...blocks);
+    await db.runAsync(`DELETE FROM tags WHERE id IN (${qs(tags.length)})`, ...tags);
+    await db.runAsync(
+      `DELETE FROM task_tags WHERE task_id IN (${qs(tasks.length)}) OR tag_id IN (${qs(tags.length)})`,
+      ...tasks, ...tags,
+    );
+    await db.runAsync(
+      `DELETE FROM outbox WHERE (table_name IN ('tasks','task_tags') AND row_id IN (${qs(tasks.length)}))
+         OR (table_name = 'blocks' AND row_id IN (${qs(blocks.length)}))
+         OR (table_name = 'tags' AND row_id IN (${qs(tags.length)}))`,
+      ...tasks, ...blocks, ...tags,
+    );
+    await markDemo(db, { tasks: [], blocks: [], tags: [] }, 'cleared');
+    return del;
+  });
+}
+
+/** 로그아웃 — 이 기기의 데이터를 전부 지운다. 처음처럼 예시가 다시 보인다 */
+export const wipeLocal = () => resetAll();
 
 /** 개발용 — 전부 지우고 다시 심는다 */
 export async function resetAll() {

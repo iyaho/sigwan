@@ -39,7 +39,7 @@ type Row = Record<string, unknown>;
 
 const b = (v: unknown) => v === 1 || v === true;
 
-function rowToTask(r: Row): Task {
+export function rowToTask(r: Row): Task {
   return {
     id: r.id as string,
     user_id: r.user_id as string,
@@ -71,7 +71,7 @@ function rowToTask(r: Row): Task {
   };
 }
 
-function rowToBlock(r: Row): Block {
+export function rowToBlock(r: Row): Block {
   return {
     id: r.id as string,
     user_id: r.user_id as string,
@@ -87,7 +87,7 @@ function rowToBlock(r: Row): Block {
   };
 }
 
-function rowToTag(r: Row): Tag {
+export function rowToTag(r: Row): Tag {
   return {
     id: r.id as string,
     user_id: r.user_id as string,
@@ -108,7 +108,7 @@ const toWeekdays = (v: unknown): number[] =>
     .map(Number);
 const fromWeekdays = (w: number[]) => [...w].sort((a, b) => a - b).join(',');
 
-function rowToTimetable(r: Row): Timetable {
+export function rowToTimetable(r: Row): Timetable {
   return {
     id: r.id as string,
     user_id: r.user_id as string,
@@ -121,7 +121,7 @@ function rowToTimetable(r: Row): Timetable {
   };
 }
 
-function rowToRoutine(r: Row): Routine {
+export function rowToRoutine(r: Row): Routine {
   return {
     id: r.id as string,
     user_id: r.user_id as string,
@@ -137,7 +137,7 @@ function rowToRoutine(r: Row): Routine {
   };
 }
 
-function rowToCheck(r: Row): RoutineCheck {
+export function rowToCheck(r: Row): RoutineCheck {
   return {
     id: r.id as string,
     user_id: r.user_id as string,
@@ -158,7 +158,7 @@ export const CURSOR_KEY = 'sync_cursor';
  * outbox 한 줄. base_rev는 지금의 커서 — "서버 것을 여기까지 받아 둔 상태에서 고쳤다"는 표시다.
  * 서버는 이걸로 최신을 보고 고친 것인지, 모르고 동시에 고친 충돌인지 가른다 (core/sync.ts)
  */
-async function outbox(db: Tx, table: SyncTable, rowId: string, op: OutboxEntry['op'], payload: unknown) {
+export async function outbox(db: Tx, table: SyncTable, rowId: string, op: OutboxEntry['op'], payload: unknown) {
   const cur = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', CURSOR_KEY);
   await db.runAsync(
     'INSERT INTO outbox (table_name,row_id,op,payload,created_at,base_rev) VALUES (?,?,?,?,?,?)',

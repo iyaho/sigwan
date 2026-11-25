@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import type { PullChange, PushChange, SyncServer, SyncTable, Task } from '@sigwan/core';
 import { createSupabaseServer, newId, nowIso, syncOnce } from '@sigwan/core';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { db, repos } from './db';
+import { clearDemo, db, enqueueAll, repos, seedIfEmpty, wipeLocal } from './db';
 import { dexieSyncLocal } from './sync';
 
 /**
@@ -109,6 +109,45 @@ describe('dexieSyncLocal', () => {
     expect((await db.task_tags.where('task_id').equals('from-phone').toArray()).map((l) => l.tag_id)).toEqual(['g1', 'g2']);
     expect((await repos.routines.list())[0]).toMatchObject({ name: '자료구조', weekdays: [0, 2] });
     expect(await db.outbox.count()).toBe(0);
+  });
+});
+
+describe('예시 데이터와 로그인', () => {
+  beforeEach(async () => {
+    await wipeLocal();
+  });
+
+  it('예시는 보여 주기만 — 고친 기록도 서버로 안 가고, 처음 등록하면 사라진다', async () => {
+    await seedIfEmpty();
+    const demo = await repos.tasks.list();
+    expect(demo.length).toBeGreaterThan(20);
+    await repos.tasks.upsert({ ...demo[0]!, status: 'done' }); // 예시를 체크해 본다
+    expect(await db.outbox.count()).toBe(1);
+
+    const del = await clearDemo();
+    expect(del!.tasks.length).toBe(demo.length);
+    expect(await db.tasks.count()).toBe(0);
+    expect(await db.blocks.count()).toBe(0);
+    expect(await db.outbox.count()).toBe(0);
+    expect(await clearDemo()).toBeNull(); // 두 번째는 할 일이 없다
+
+    await seedIfEmpty(); // 다시 열어도 예시를 또 넣지 않는다
+    expect(await db.tasks.count()).toBe(0);
+  });
+
+  it('처음 로그인 — 예시는 빼고, 내가 쓴 것은 outbox에 없던 것까지 전부 적는다', async () => {
+    await seedIfEmpty();
+    const mine = await repos.tasks.upsert(task('내 할 일'));
+    await repos.tags.setTaskTags(mine.id, ['g1']);
+    await db.outbox.clear(); // outbox가 비어 있어도(예: 기록 전에 쓴 것) 다 올라가야 한다
+
+    const n = await enqueueAll();
+    const ob = await db.outbox.toArray();
+    expect(n).toBe(2);
+    expect(ob.map((e) => [e.table_name, e.row_id])).toEqual([
+      ['tasks', mine.id],
+      ['task_tags', mine.id],
+    ]);
   });
 });
 

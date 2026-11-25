@@ -21,7 +21,18 @@ import type {
   Timetable,
   TimetableRepo,
 } from '@sigwan/core';
-import { checkKey, makeMockData, nowIso } from '@sigwan/core';
+import type { DemoIds } from '@sigwan/core';
+import {
+  checkKey,
+  DEMO_IDS_KEY,
+  DEMO_STATE_KEY,
+  demoIdsOf,
+  demoRowsToDelete,
+  detectLegacyDemo,
+  makeMockData,
+  nowIso,
+  pendingKey,
+} from '@sigwan/core';
 import Dexie, { type EntityTable, type Table } from 'dexie';
 
 /**
@@ -123,8 +134,22 @@ let seeding: Promise<void> | null = null;
 export function seedIfEmpty(): Promise<void> {
   if (!seeding) {
     seeding = (async () => {
-      await db.transaction('rw', db.tasks, db.blocks, db.tags, db.task_tags, async () => {
-        if ((await db.tasks.count()) > 0) return;
+      await db.transaction('rw', [db.tasks, db.blocks, db.tags, db.task_tags, db.meta], async () => {
+        // 예시를 이미 넣었거나 지웠다 — 다시 넣지 않는다
+        if (await db.meta.get(DEMO_STATE_KEY)) return;
+
+        if ((await db.tasks.count()) > 0) {
+          // 예시 id를 적어 두기 전에 깔린 기기. 예시 행을 찾아서 적는다 (core/demo.ts)
+          const ids = detectLegacyDemo({
+            tasks: await db.tasks.toArray(),
+            blocks: await db.blocks.toArray(),
+            tags: await db.tags.toArray(),
+            taskTags: await db.task_tags.toArray(),
+          });
+          await markDemo(ids, ids.tasks.length ? 'shown' : 'cleared');
+          return;
+        }
+
         const m = makeMockData(new Date());
         await db.tags.bulkAdd(m.tags);
         await db.tasks.bulkAdd(m.tasks);
@@ -132,6 +157,7 @@ export function seedIfEmpty(): Promise<void> {
         await db.task_tags.bulkAdd(
           m.taskTags.map((tt) => ({ ...tt, id: `${tt.task_id}:${tt.tag_id}` })),
         );
+        await markDemo(demoIdsOf(m), 'shown');
       });
     })().catch((e) => {
       seeding = null;
@@ -142,10 +168,95 @@ export function seedIfEmpty(): Promise<void> {
 }
 
 export async function resetAll(): Promise<void> {
+  await wipeLocal();
+  await seedIfEmpty();
+}
+
+/** 로그아웃 — 이 기기의 데이터를 전부 지운다. 다음에 열면 처음처럼 예시가 보인다 */
+export async function wipeLocal(): Promise<void> {
   seeding = null;
   await db.delete();
   await db.open();
-  await seedIfEmpty();
+}
+
+async function markDemo(ids: DemoIds, state: 'shown' | 'cleared') {
+  await db.meta.bulkPut([
+    { key: DEMO_IDS_KEY, value: JSON.stringify(ids) },
+    { key: DEMO_STATE_KEY, value: state },
+  ]);
+}
+
+/**
+ * 예시 데이터를 치운다 — 직접 뭔가를 처음 등록할 때, 그리고 로그인할 때.
+ * 예시를 고친 outbox 기록도 같이 지운다 — 예시는 서버로 가면 안 된다.
+ * 지운 id를 돌려준다(화면 상태에서도 빼야 한다). 이미 치웠으면 null.
+ */
+export async function clearDemo(): Promise<DemoIds | null> {
+  return db.transaction('rw', [db.tasks, db.blocks, db.tags, db.task_tags, db.outbox, db.meta], async () => {
+    if ((await db.meta.get(DEMO_STATE_KEY))?.value !== 'shown') return null;
+    const raw = await db.meta.get(DEMO_IDS_KEY);
+    const ids: DemoIds = raw ? JSON.parse(raw.value) : { tasks: [], blocks: [], tags: [] };
+    const links = await db.task_tags.toArray();
+    const del = demoRowsToDelete(ids, {
+      tasks: await db.tasks.toArray(),
+      blocks: await db.blocks.toArray(),
+      taskTags: links,
+    });
+    const dt = new Set(del.tasks);
+    const dg = new Set(del.tags);
+    await db.tasks.bulkDelete(del.tasks);
+    await db.blocks.bulkDelete(del.blocks);
+    await db.tags.bulkDelete(del.tags);
+    await db.task_tags.bulkDelete(links.filter((l) => dt.has(l.task_id) || dg.has(l.tag_id)).map((l) => l.id));
+
+    const keys = new Set([
+      ...del.tasks.flatMap((id) => [pendingKey('tasks', id), pendingKey('task_tags', id)]),
+      ...del.blocks.map((id) => pendingKey('blocks', id)),
+      ...del.tags.map((id) => pendingKey('tags', id)),
+    ]);
+    const ob = await db.outbox.toArray();
+    await db.outbox.bulkDelete(ob.filter((e) => keys.has(pendingKey(e.table_name, e.row_id))).map((e) => e.seq));
+
+    await markDemo({ tasks: [], blocks: [], tags: [] }, 'cleared');
+    return del;
+  });
+}
+
+/**
+ * 처음 로그인할 때 — 이 기기의 행 전체를 outbox에 다시 적는다. 로그인 전에 쓴 것은 outbox에 일부만 있거나
+ * (예시를 지우기 전 것) 아예 없을 수 있다. 예시는 먼저 치운다(clearDemo). 적은 줄 수를 돌려준다.
+ */
+export async function enqueueAll(): Promise<number> {
+  await clearDemo();
+  const tables = [db.tasks, db.blocks, db.tags, db.task_tags, db.timetables, db.routines, db.routine_checks, db.settings];
+  return db.transaction('rw', [...tables, db.outbox, db.meta], async () => {
+    await db.outbox.clear();
+    let n = 0;
+    const each = async <R extends { id: string }>(name: SyncTable, rows: R[]) => {
+      for (const r of rows) {
+        await logOutbox(name, r.id, r);
+        n++;
+      }
+    };
+    await each('tasks', await db.tasks.toArray());
+    await each('blocks', await db.blocks.toArray());
+    await each('tags', await db.tags.toArray());
+    await each('timetables', await db.timetables.toArray());
+    await each('routines', await db.routines.toArray());
+    await each('routine_checks', await db.routine_checks.toArray());
+    const byTask = new Map<string, string[]>();
+    for (const l of await db.task_tags.toArray()) byTask.set(l.task_id, [...(byTask.get(l.task_id) ?? []), l.tag_id]);
+    for (const [taskId, tagIds] of byTask) {
+      const payload: TaskTagsPayload = { task_id: taskId, tag_ids: tagIds, updated_at: nowIso() };
+      await logOutbox('task_tags', taskId, payload);
+      n++;
+    }
+    for (const s of await db.settings.toArray()) {
+      await logOutbox('settings', s.user_id, s);
+      n++;
+    }
+    return n;
+  });
 }
 
 /**

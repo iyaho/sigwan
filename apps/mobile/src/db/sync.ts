@@ -1,8 +1,18 @@
-import type { OutboxEntry, PullChange, SyncLocal, SyncTable } from '@sigwan/core';
-import { pendingKey } from '@sigwan/core';
+import type { OutboxEntry, PullChange, SyncLocal, SyncTable, TaskTagsPayload } from '@sigwan/core';
+import { nowIso, pendingKey } from '@sigwan/core';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { CURSOR_KEY } from './repos';
-import { getDb, withWrite } from './sqlite';
+import {
+  CURSOR_KEY,
+  outbox,
+  repos,
+  rowToBlock,
+  rowToCheck,
+  rowToRoutine,
+  rowToTag,
+  rowToTask,
+  rowToTimetable,
+} from './repos';
+import { clearDemo, getDb, withWrite } from './sqlite';
 
 /**
  * core/syncOnce가 쓰는 기기 쪽 — SQLite 판. 웹 Dexie 판(apps/web/src/lib/sync.ts)과 1:1.
@@ -96,3 +106,43 @@ export const sqliteSyncLocal: SyncLocal = {
     });
   },
 };
+
+/**
+ * 처음 로그인할 때 — 이 기기의 행 전체를 outbox에 다시 적는다. 로그인 전에 쓴 것은 outbox에 일부만 있거나
+ * (예시를 지우기 전 것) 아예 없을 수 있다. 예시는 먼저 치운다(clearDemo). 적은 줄 수를 돌려준다.
+ */
+export async function enqueueAll(): Promise<number> {
+  await clearDemo();
+  const settings = await repos.settings.get();
+  return withWrite(async (db) => {
+    await db.runAsync('DELETE FROM outbox');
+    let n = 0;
+    const each = async <R extends { id: string }>(table: SyncTable, sql: string, conv: (r: Record<string, unknown>) => R) => {
+      for (const r of await db.getAllAsync<Record<string, unknown>>(sql)) {
+        const row = conv(r);
+        await outbox(db, table, row.id, 'upsert', row);
+        n++;
+      }
+    };
+    await each('tasks', 'SELECT * FROM tasks', rowToTask);
+    await each('blocks', 'SELECT * FROM blocks', rowToBlock);
+    await each('tags', 'SELECT * FROM tags', rowToTag);
+    await each('timetables', 'SELECT * FROM timetables', rowToTimetable);
+    await each('routines', 'SELECT * FROM routines', rowToRoutine);
+    await each('routine_checks', 'SELECT * FROM routine_checks', rowToCheck);
+    const byTask = new Map<string, string[]>();
+    for (const l of await db.getAllAsync<{ task_id: string; tag_id: string }>('SELECT task_id, tag_id FROM task_tags')) {
+      byTask.set(l.task_id, [...(byTask.get(l.task_id) ?? []), l.tag_id]);
+    }
+    for (const [taskId, tagIds] of byTask) {
+      const payload: TaskTagsPayload = { task_id: taskId, tag_ids: tagIds, updated_at: nowIso() };
+      await outbox(db, 'task_tags', taskId, 'upsert', payload);
+      n++;
+    }
+    if (settings) {
+      await outbox(db, 'settings', settings.user_id, 'upsert', settings);
+      n++;
+    }
+    return n;
+  });
+}
