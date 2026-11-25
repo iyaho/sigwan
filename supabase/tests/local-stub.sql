@@ -13,5 +13,5 @@ $$;
 grant usage on schema auth to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
 grant usage on schema public to anon, authenticated;
--- Supabase는 public의 새 테이블을 두 역할에 열어 둔다. 막는 것은 RLS다 — 그래서 RLS가 빠지면 바로 샌다
-alter default privileges in schema public grant all on tables to anon, authenticated;
+-- 새 테이블에 자동 권한을 주지 않는다 — 지금 Supabase 프로젝트가 그렇다(2026-11 실서버 확인).
+-- 예전 프로젝트처럼 자동으로 열어 두면 마이그레이션에서 GRANT를 빠뜨려도 이 시험이 통과해 버린다

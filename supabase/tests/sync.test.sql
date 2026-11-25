@@ -118,7 +118,8 @@ do $$ begin
   end;
   begin
     delete from public.tasks where id = 't1';
-    assert (select count(*) from public.tasks where id = 't1') = 1, '클라이언트가 물리 삭제했다 (DELETE 정책 없어야)';
+    raise exception '클라이언트가 물리 삭제했다 (DELETE 권한이 없어야)';
+  exception when insufficient_privilege then null;
   end;
 end $$;
 commit;
@@ -186,7 +187,11 @@ do $$ begin
     raise exception 'anon이 sync_push를 불렀다';
   exception when insufficient_privilege then null;
   end;
-  assert (select count(*) from public.tasks) = 0, 'anon이 tasks를 본다';
+  begin
+    perform count(*) from public.tasks;
+    raise exception 'anon이 tasks를 읽었다';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 commit;
 
