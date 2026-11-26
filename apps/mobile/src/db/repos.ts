@@ -22,6 +22,7 @@ import type {
 } from '@sigwan/core';
 import { checkKey, nowIso } from '@sigwan/core';
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { notifyOutboxWrite } from './outboxEvents';
 import { getDb, withWrite } from './sqlite';
 
 /** 쓰기는 전부 withWrite — 직렬 큐에 서고 그 안에서만 트랜잭션을 연다 (sqlite.ts 주석 참조) */
@@ -164,6 +165,7 @@ export async function outbox(db: Tx, table: SyncTable, rowId: string, op: Outbox
     'INSERT INTO outbox (table_name,row_id,op,payload,created_at,base_rev) VALUES (?,?,?,?,?,?)',
     table, rowId, op, JSON.stringify(payload), nowIso(), cur ? Number(cur.value) : 0,
   );
+  notifyOutboxWrite();
 }
 
 const arr = <T>(v: T | T[] | undefined): T[] | undefined =>

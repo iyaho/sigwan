@@ -7,6 +7,7 @@ export * from './id';
 export * from './mock';
 export * from './progress';
 export * from './taskDate';
+export * from './auth';
 export * from './calendar';
 export * from './demo';
 export * from './views';

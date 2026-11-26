@@ -1,4 +1,4 @@
-import type { AutoScheduleResult, Block, FitResult, Proposal, Routine, Settings, SleepPattern, Tag, Task, Timetable, ZoomLevel } from '@sigwan/core';
+import type { AutoScheduleResult, Block, FitResult, Proposal, Routine, Settings, SleepPattern, SyncStatus, Tag, Task, Timetable, ZoomLevel } from '@sigwan/core';
 import {
   addDays,
   activeTimetable,
@@ -31,6 +31,10 @@ export type AutoRange = 'today' | 'week';
 
 interface State {
   ready: boolean;
+  /** 9.1 로그인한 아이디. 없으면 게스트 — 이 기기에만 저장한다 */
+  account: { username: string } | null;
+  /** 7장 동기화 상태 — 사이드바 아래에 보인다 */
+  syncStatus: SyncStatus;
   tasks: Task[];
   blocks: Block[];
   tags: Tag[];
@@ -217,6 +221,8 @@ export const useStore = create<State>((set, get) => ({
   selectedTagIds: [],
   selectedTaskId: null,
   notice: null,
+  account: null,
+  syncStatus: { state: 'off', lastAt: null, error: null },
   zoom: 'day',
   origin: startOfDay(),
   snapDisabled: false,
@@ -259,7 +265,11 @@ export const useStore = create<State>((set, get) => ({
       settings: settings ?? defaultSettings(),
       ready: true,
     });
-    })();
+    })().finally(() => {
+      // 끝나면 풀어 둔다. 안 풀면 두 번째 load()부터는 옛 promise만 돌려받아 다시 읽지 않는다 —
+      // 동기화로 받은 것이 화면에 안 나타난다
+      loading = null;
+    });
     return loading;
   },
 

@@ -6,6 +6,7 @@ import type {
   Routine,
   Settings,
   SleepPattern,
+  SyncStatus,
   Tag,
   Task,
   Timetable,
@@ -41,6 +42,10 @@ export type AutoRange = 'today' | 'week';
 
 interface State {
   ready: boolean;
+  /** 9.1 로그인한 아이디. 없으면 게스트 — 이 기기에만 저장한다 */
+  account: { username: string } | null;
+  /** 7장 동기화 상태 — 설정 탭에 보인다 */
+  syncStatus: SyncStatus;
   /**
    * load()가 실패하면 여기 남는다.
    * 예전엔 그냥 rejected promise로 사라져서 로딩 화면이 영원히 떠 있었고,
@@ -169,6 +174,8 @@ async function dropDemo() {
 export const useStore = create<State>((set, get) => ({
   ready: false,
   error: null,
+  account: null,
+  syncStatus: { state: 'off', lastAt: null, error: null },
   tasks: [],
   blocks: [],
   tags: [],

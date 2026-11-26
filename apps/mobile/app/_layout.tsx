@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { initAccount } from '@/account';
 import { useStore } from '@/store';
 import { useTheme } from '@/theme';
 
@@ -13,7 +14,8 @@ export default function RootLayout() {
   const load = useStore((s) => s.load);
 
   useEffect(() => {
-    void load();
+    // 화면을 먼저 띄우고, 저장된 로그인이 있으면 그다음에 이어서 동기화한다
+    void load().then(() => initAccount());
   }, [load]);
 
   if (error) {

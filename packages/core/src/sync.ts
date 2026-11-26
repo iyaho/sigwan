@@ -223,3 +223,104 @@ export function createSupabaseServer(
     pull: (since) => call<PullResult>('sync_pull', { since }),
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 언제 돌리나 (7장) — 포그라운드 진입 / 변경 후 2초 / 15분마다. 웹과 앱이 같은 규칙을 쓴다
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SyncStatus {
+  state: 'off' | 'syncing' | 'ok' | 'error';
+  /** 마지막으로 성공한 때 */
+  lastAt: string | null;
+  error: string | null;
+}
+
+export interface SyncRunner {
+  /** 지금 한 바퀴. 이미 도는 중이면 그게 끝난 뒤 한 번 더 돈다 */
+  syncNow(): Promise<SyncReport | null>;
+  /** 변경이 생겼다 — 잠깐 모았다가 돈다 */
+  schedule(): void;
+  /** 15분 주기 시작 / 멈춤 */
+  start(): void;
+  stop(): void;
+}
+
+export function createSyncRunner(o: {
+  local: SyncLocal;
+  /** 로그인 안 했으면 null — 그때는 아무것도 안 한다 */
+  server: () => SyncServer | null;
+  /** 받은 것이 있으면 화면을 다시 읽는다 */
+  onPulled: (report: SyncReport) => void | Promise<void>;
+  onStatus: (s: SyncStatus) => void;
+  debounceMs?: number;
+  intervalMs?: number;
+}): SyncRunner {
+  const debounceMs = o.debounceMs ?? 2000;
+  const intervalMs = o.intervalMs ?? 15 * 60_000;
+  let running: Promise<SyncReport | null> | null = null;
+  let again = false;
+  let debounce: ReturnType<typeof setTimeout> | null = null;
+  let interval: ReturnType<typeof setInterval> | null = null;
+  let status: SyncStatus = { state: 'off', lastAt: null, error: null };
+  const emit = (patch: Partial<SyncStatus>) => {
+    status = { ...status, ...patch };
+    o.onStatus(status);
+  };
+
+  async function once(): Promise<SyncReport | null> {
+    const server = o.server();
+    if (!server) {
+      emit({ state: 'off', error: null });
+      return null;
+    }
+    emit({ state: 'syncing' });
+    try {
+      const r = await syncOnce(o.local, server);
+      emit({ state: 'ok', lastAt: new Date().toISOString(), error: null });
+      if (r.pulled > 0) await o.onPulled(r);
+      return r;
+    } catch (e) {
+      // 오프라인이면 여기로 온다. outbox는 그대로 남아 다음 바퀴에 올라간다
+      emit({ state: 'error', error: e instanceof Error ? e.message : String(e) });
+      return null;
+    }
+  }
+
+  async function syncNow(): Promise<SyncReport | null> {
+    if (running) {
+      again = true;
+      return running;
+    }
+    running = (async () => {
+      let r = await once();
+      while (again) {
+        again = false;
+        r = await once();
+      }
+      return r;
+    })().finally(() => {
+      running = null;
+    });
+    return running;
+  }
+
+  return {
+    syncNow,
+    schedule() {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        debounce = null;
+        void syncNow();
+      }, debounceMs);
+    },
+    start() {
+      if (!interval) interval = setInterval(() => void syncNow(), intervalMs);
+    },
+    stop() {
+      if (interval) clearInterval(interval);
+      interval = null;
+      if (debounce) clearTimeout(debounce);
+      debounce = null;
+    },
+  };
+}

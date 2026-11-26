@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createSyncRunner,
   normalizeRemoteRow,
   type OutboxEntry,
   type PullChange,
@@ -247,5 +248,56 @@ describe('normalizeRemoteRow', () => {
       user_id: 'local-user',
       updated_at: '2026-11-25T00:00:00.000Z',
     });
+  });
+});
+
+describe('createSyncRunner', () => {
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it('로그인 안 했으면 아무것도 안 하고 off', async () => {
+    const states: string[] = [];
+    const r = createSyncRunner({ local: fakeLocal().local, server: () => null, onPulled: () => {}, onStatus: (s) => states.push(s.state) });
+    expect(await r.syncNow()).toBeNull();
+    expect(states).toEqual(['off']);
+  });
+
+  it('도는 중에 또 부르면 겹치지 않고, 끝난 뒤 한 번 더 돈다', async () => {
+    const s = fakeServer();
+    const l = fakeLocal();
+    let pushes = 0;
+    const server: SyncServer = { push: (c) => (pushes++, s.server.push(c)), pull: (x) => s.server.pull(x) };
+    const r = createSyncRunner({ local: l.local, server: () => server, onPulled: () => {}, onStatus: () => {} });
+    l.write('tasks', task('a'));
+    const p1 = r.syncNow();
+    l.write('tasks', task('b'));
+    const p2 = r.syncNow();
+    await Promise.all([p1, p2]);
+    await tick();
+    expect(pushes).toBe(2); // a를 올린 바퀴 + 끝난 뒤 한 번 더(b)
+    expect(l.outbox).toHaveLength(0);
+  });
+
+  it('받은 것이 있을 때만 화면을 다시 읽고, 오류는 상태로 알린다', async () => {
+    const s = fakeServer();
+    const l = fakeLocal();
+    let reloaded = 0;
+    const statuses: string[] = [];
+    let fail = false;
+    const server: SyncServer = {
+      push: (c) => s.server.push(c),
+      pull: async (x) => {
+        if (fail) throw new Error('offline');
+        return s.server.pull(x);
+      },
+    };
+    const r = createSyncRunner({ local: l.local, server: () => server, onPulled: () => void reloaded++, onStatus: (x) => statuses.push(x.state) });
+    await r.syncNow();
+    expect(reloaded).toBe(0);
+    s.put('tasks', task('from-phone'));
+    await r.syncNow();
+    expect(reloaded).toBe(1);
+    fail = true;
+    expect(await r.syncNow()).toBeNull();
+    expect(statuses.at(-1)).toBe('error');
   });
 });

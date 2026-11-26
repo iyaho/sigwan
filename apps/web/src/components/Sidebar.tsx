@@ -1,6 +1,7 @@
 import type * as React from 'react';
 import { useMemo, useState } from 'react';
 import { resetAll } from '../lib/db';
+import { AccountFoot } from './Account';
 import { useLayout } from '../lib/layout';
 import { useStore } from '../store';
 import { type ViewKey, viewProgress } from '@sigwan/core';
@@ -194,6 +195,7 @@ export function Sidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
         </ul>
         {!tags.length && <p className="hint" style={{ padding: '0 16px' }}>태그가 없다. + 로 만든다.</p>}
       </div>
+      <AccountFoot />
       <div className="side-foot">
         <button type="button" className="icon-btn" onClick={onOpenSettings} title="수면·고정 일정 (3.8)">
           ⚙ 설정
