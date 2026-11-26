@@ -19,7 +19,7 @@ function mulberry32(seed: number) {
   };
 }
 
-const TAG_DEFS: [string, string][] = [
+export const MOCK_TAG_DEFS: [string, string][] = [
   ['학교', '#3e63dd'],
   ['SINE', '#8e4ec6'],
   ['알바', '#f76b15'],
@@ -66,7 +66,7 @@ const TITLES_SOMEDAY = [
   '읽을 책 목록 정리',
   '깃허브 프로필 꾸미기',
 ];
-const TITLES_EVENT = ['운영체제 강의', 'SINE 정기모임', '알바', '스터디', '점심 약속'];
+export const MOCK_EVENT_TITLES = ['운영체제 강의', 'SINE 정기모임', '알바', '스터디', '점심 약속'];
 
 export interface MockData {
   tags: Tag[];
@@ -89,13 +89,14 @@ export function makeMockData(now: Date = new Date(), seed = 20251895): MockData 
   const userId = 'local-user';
   const createdAt = iso(shift(now, -30 * D));
 
-  const tags: Tag[] = TAG_DEFS.map(([name, color], i) => ({
+  const tags: Tag[] = MOCK_TAG_DEFS.map(([name, color], i) => ({
     id: newId(),
     user_id: userId,
     name,
     color,
     sort_order: i,
     deleted_at: null,
+    updated_at: createdAt,
     rev: 0,
   }));
 
@@ -227,12 +228,13 @@ export function makeMockData(now: Date = new Date(), seed = 20251895): MockData 
       id: newId(),
       user_id: userId,
       task_id: linked ? linked.id : null,
-      title: linked ? null : pick(TITLES_EVENT),
+      title: linked ? null : pick(MOCK_EVENT_TITLES),
       start_at: iso(start),
       end_at: iso(shift(start, durationMin * 60_000)),
       is_all_day: false,
       source: rnd() < 0.5 ? 'drag' : 'manual',
       deleted_at: null,
+      updated_at: createdAt,
       rev: 0,
     });
   }

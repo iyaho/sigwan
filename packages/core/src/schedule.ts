@@ -32,6 +32,7 @@ function virtualBlock(id: string, title: string, s: Date, e: Date): Block {
     is_all_day: false,
     source: 'import',
     deleted_at: null,
+    updated_at: s.toISOString(),
     rev: 0,
   };
 }
@@ -359,6 +360,7 @@ export function proposalToBlock(p: Proposal, id: string, userId: string): Block 
     is_all_day: false,
     source: 'drag',
     deleted_at: null,
+    updated_at: new Date().toISOString(),
     rev: 0,
   };
 }

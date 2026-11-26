@@ -56,6 +56,7 @@ function block(id: string, s: string, e: string, taskId: string | null = null): 
     is_all_day: false,
     source: 'manual',
     deleted_at: null,
+    updated_at: '2026-09-01T00:00:00.000Z',
     rev: 0,
   };
 }
@@ -68,6 +69,7 @@ const routine = (p: Partial<Routine> & { id: string; weekdays: number[] }): Rout
   end_min: 10 * 60 + 30,
   color: '#3e63dd',
   deleted_at: null,
+  updated_at: '2026-09-01T00:00:00.000Z',
   rev: 0,
   ...p,
 });
@@ -80,6 +82,7 @@ const tt = (p: Partial<Timetable> = {}): Timetable => ({
   active_from: null,
   active_to: null,
   deleted_at: null,
+  updated_at: '2026-09-01T00:00:00.000Z',
   rev: 0,
   ...p,
 });

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AddTask } from './components/AddTask';
 import { AutoSchedule } from './components/AutoSchedule';
 import { DetailPanel } from './components/DetailPanel';
+import { initAccount } from './lib/account';
 import { Settings } from './components/Settings';
 import { Sidebar } from './components/Sidebar';
 import { Splitter } from './components/Splitter';
@@ -31,7 +32,8 @@ export default function App() {
   const [setOpen, setSetOpen] = useState(false);
 
   useEffect(() => {
-    void load();
+    // 화면을 먼저 띄우고, 저장된 로그인이 있으면 그다음에 이어서 동기화한다
+    void load().then(() => initAccount());
   }, [load]);
 
   // 알림은 3초 뒤 스스로 사라진다

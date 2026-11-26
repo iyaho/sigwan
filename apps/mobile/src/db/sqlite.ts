@@ -1,4 +1,12 @@
-import { makeMockData } from '@sigwan/core';
+import type { Block, DemoIds, Tag, Task, TaskTag } from '@sigwan/core';
+import {
+  DEMO_IDS_KEY,
+  DEMO_STATE_KEY,
+  demoIdsOf,
+  demoRowsToDelete,
+  detectLegacyDemo,
+  makeMockData,
+} from '@sigwan/core';
 import * as SQLite from 'expo-sqlite';
 
 /**
@@ -102,6 +110,7 @@ async function open() {
       is_all_day INTEGER NOT NULL DEFAULT 0,
       source TEXT NOT NULL DEFAULT 'manual',
       deleted_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT '',     -- 7장 LWW 기준. 레포가 쓸 때마다 찍는다
       rev INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_blocks_range ON blocks (user_id, start_at, end_at) WHERE deleted_at IS NULL;
@@ -113,6 +122,7 @@ async function open() {
       color TEXT NOT NULL,
       sort_order REAL NOT NULL DEFAULT 0,
       deleted_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT '',     -- 7장 LWW 기준. 레포가 쓸 때마다 찍는다
       rev INTEGER NOT NULL DEFAULT 0,
       UNIQUE (user_id, name)
     );
@@ -130,6 +140,7 @@ async function open() {
       active_from TEXT,
       active_to TEXT,
       deleted_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT '',     -- 7장 LWW 기준. 레포가 쓸 때마다 찍는다
       rev INTEGER NOT NULL DEFAULT 0
     );
 
@@ -147,6 +158,7 @@ async function open() {
       active_from TEXT,
       active_to TEXT,
       deleted_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT '',     -- 7장 LWW 기준. 레포가 쓸 때마다 찍는다
       rev INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_routines_live ON routines (user_id) WHERE deleted_at IS NULL;
@@ -171,6 +183,7 @@ async function open() {
       day TEXT NOT NULL,                         -- 로컬 날짜 YYYY-MM-DD (7장)
       checked_at TEXT NOT NULL,
       deleted_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT '',     -- 7장 LWW 기준. 레포가 쓸 때마다 찍는다
       rev INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_routine_checks_day ON routine_checks (user_id, day) WHERE deleted_at IS NULL;
@@ -182,13 +195,20 @@ async function open() {
       row_id TEXT NOT NULL,
       op TEXT NOT NULL CHECK (op IN ('upsert','delete')),
       payload TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      base_rev INTEGER                           -- 기록할 때의 동기화 커서 (core/sync.ts)
     );
 
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `);
   // CREATE TABLE IF NOT EXISTS는 이미 있는 테이블에 컬럼을 더해주지 않는다. 그건 ALTER다.
   await ensureColumn(db, 'routines', 'timetable_id', "timetable_id TEXT NOT NULL DEFAULT ''");
+  for (const t of ['blocks', 'tags', 'timetables', 'routines', 'routine_checks']) {
+    await ensureColumn(db, t, 'updated_at', "updated_at TEXT NOT NULL DEFAULT ''");
+    // 컬럼이 막 생긴 기기의 옛 행은 빈 값이다. 서버는 빈 시각을 못 받으므로 지금으로 채운다
+    await db.runAsync(`UPDATE ${t} SET updated_at = ? WHERE updated_at = ''`, new Date().toISOString());
+  }
+  await ensureColumn(db, 'outbox', 'base_rev', 'base_rev INTEGER');
   await migrateTimetables(db);
   await seedIfEmpty(db);
   return db;
@@ -225,7 +245,8 @@ async function migrateTimetables(db: SQLite.SQLiteDatabase) {
   await serial(() =>
     db.withTransactionAsync(async () => {
       await db.runAsync(
-        "INSERT OR REPLACE INTO timetables (id,user_id,name,active_from,active_to,deleted_at,rev) VALUES ('tt-legacy','local-user','기본',NULL,NULL,NULL,0)",
+        "INSERT OR REPLACE INTO timetables (id,user_id,name,active_from,active_to,deleted_at,updated_at,rev) VALUES ('tt-legacy','local-user','기본',NULL,NULL,NULL,?,0)",
+        new Date().toISOString(),
       );
       await db.runAsync("UPDATE routines SET timetable_id = 'tt-legacy' WHERE timetable_id = '' OR timetable_id IS NULL");
     }),
@@ -239,18 +260,32 @@ async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
    * 같은 이름의 태그를 또 넣게 되고 UNIQUE(user_id, name)에 걸린다.
    * 게다가 아래 INSERT가 맨 INSERT였어서 그대로 예외가 됐다 — 지금은 OR REPLACE다.
    */
+  // 예시를 이미 넣었거나 지웠다 — 다시 넣지 않는다 (core/demo.ts)
+  const state = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', DEMO_STATE_KEY);
+  if (state) return;
+
   const row = await db.getFirstAsync<{ n: number }>(
     'SELECT (SELECT COUNT(*) FROM tasks) + (SELECT COUNT(*) FROM tags) AS n',
   );
-  if ((row?.n ?? 0) > 0) return;
+  if ((row?.n ?? 0) > 0) {
+    // 예시 id를 적어 두기 전에 깔린 기기. 판별에 쓰는 열만 읽는다
+    const ids = detectLegacyDemo({
+      tasks: await db.getAllAsync<Task>('SELECT id, created_at, parent_id FROM tasks'),
+      blocks: await db.getAllAsync<Block>('SELECT id, task_id, title FROM blocks'),
+      tags: await db.getAllAsync<Tag>('SELECT id, name FROM tags'),
+      taskTags: await db.getAllAsync<TaskTag>('SELECT task_id, tag_id FROM task_tags'),
+    });
+    await serial(() => markDemo(db, ids, ids.tasks.length ? 'shown' : 'cleared'));
+    return;
+  }
   const m = makeMockData(new Date());
   // open() 안에서 불리므로 withWrite(→getDb)를 쓰면 자기 자신을 기다려 교착된다
   await serial(() =>
     db.withTransactionAsync(async () => {
     for (const t of m.tags) {
       await db.runAsync(
-        'INSERT OR REPLACE INTO tags (id,user_id,name,color,sort_order,deleted_at,rev) VALUES (?,?,?,?,?,?,?)',
-        t.id, t.user_id, t.name, t.color, t.sort_order, t.deleted_at, t.rev,
+        'INSERT OR REPLACE INTO tags (id,user_id,name,color,sort_order,deleted_at,updated_at,rev) VALUES (?,?,?,?,?,?,?,?)',
+        t.id, t.user_id, t.name, t.color, t.sort_order, t.deleted_at, t.updated_at, t.rev,
       );
     }
     for (const t of m.tasks) {
@@ -267,17 +302,63 @@ async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
     }
     for (const b of m.blocks) {
       await db.runAsync(
-        'INSERT OR REPLACE INTO blocks (id,user_id,task_id,title,start_at,end_at,is_all_day,source,deleted_at,rev) VALUES (?,?,?,?,?,?,?,?,?,?)',
-        b.id, b.user_id, b.task_id, b.title, b.start_at, b.end_at, b.is_all_day ? 1 : 0, b.source, b.deleted_at, b.rev,
+        'INSERT OR REPLACE INTO blocks (id,user_id,task_id,title,start_at,end_at,is_all_day,source,deleted_at,updated_at,rev) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        b.id, b.user_id, b.task_id, b.title, b.start_at, b.end_at, b.is_all_day ? 1 : 0, b.source, b.deleted_at, b.updated_at, b.rev,
       );
     }
     for (const tt of m.taskTags) {
       await db.runAsync('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?,?)', tt.task_id, tt.tag_id);
     }
       await db.runAsync("INSERT OR REPLACE INTO meta (key,value) VALUES ('seeded_at', ?)", new Date().toISOString());
+      await markDemo(db, demoIdsOf(m), 'shown');
     }),
   );
 }
+
+async function markDemo(db: SQLite.SQLiteDatabase, ids: DemoIds, state: 'shown' | 'cleared') {
+  await db.runAsync('INSERT OR REPLACE INTO meta (key,value) VALUES (?,?)', DEMO_IDS_KEY, JSON.stringify(ids));
+  await db.runAsync('INSERT OR REPLACE INTO meta (key,value) VALUES (?,?)', DEMO_STATE_KEY, state);
+}
+
+const qs = (n: number) => Array(n).fill('?').join(',');
+
+/**
+ * 예시 데이터를 치운다 — 직접 뭔가를 처음 등록할 때, 그리고 로그인할 때.
+ * 예시를 고친 outbox 기록도 같이 지운다 — 예시는 서버로 가면 안 된다.
+ * 지운 id를 돌려준다(화면 상태에서도 빼야 한다). 이미 치웠으면 null.
+ */
+export async function clearDemo(): Promise<DemoIds | null> {
+  return withWrite(async (db) => {
+    const st = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', DEMO_STATE_KEY);
+    if (st?.value !== 'shown') return null;
+    const raw = await db.getFirstAsync<{ value: string }>('SELECT value FROM meta WHERE key = ?', DEMO_IDS_KEY);
+    const ids: DemoIds = raw ? JSON.parse(raw.value) : { tasks: [], blocks: [], tags: [] };
+    const del = demoRowsToDelete(ids, {
+      tasks: await db.getAllAsync<Task>('SELECT id, parent_id FROM tasks'),
+      blocks: await db.getAllAsync<Block>('SELECT id, task_id FROM blocks'),
+      taskTags: await db.getAllAsync<TaskTag>('SELECT task_id, tag_id FROM task_tags'),
+    });
+    const { tasks, blocks, tags } = del;
+    await db.runAsync(`DELETE FROM tasks WHERE id IN (${qs(tasks.length)})`, ...tasks);
+    await db.runAsync(`DELETE FROM blocks WHERE id IN (${qs(blocks.length)})`, ...blocks);
+    await db.runAsync(`DELETE FROM tags WHERE id IN (${qs(tags.length)})`, ...tags);
+    await db.runAsync(
+      `DELETE FROM task_tags WHERE task_id IN (${qs(tasks.length)}) OR tag_id IN (${qs(tags.length)})`,
+      ...tasks, ...tags,
+    );
+    await db.runAsync(
+      `DELETE FROM outbox WHERE (table_name IN ('tasks','task_tags') AND row_id IN (${qs(tasks.length)}))
+         OR (table_name = 'blocks' AND row_id IN (${qs(blocks.length)}))
+         OR (table_name = 'tags' AND row_id IN (${qs(tags.length)}))`,
+      ...tasks, ...blocks, ...tags,
+    );
+    await markDemo(db, { tasks: [], blocks: [], tags: [] }, 'cleared');
+    return del;
+  });
+}
+
+/** 로그아웃 — 이 기기의 데이터를 전부 지운다. 처음처럼 예시가 다시 보인다 */
+export const wipeLocal = () => resetAll();
 
 /** 개발용 — 전부 지우고 다시 심는다 */
 export async function resetAll() {

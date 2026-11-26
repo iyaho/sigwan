@@ -6,6 +6,7 @@ import type {
   Routine,
   Settings,
   SleepPattern,
+  SyncStatus,
   Tag,
   Task,
   Timetable,
@@ -29,6 +30,7 @@ import {
 } from '@sigwan/core';
 import { create } from 'zustand';
 import { repos } from './db/repos';
+import { clearDemo } from './db/sqlite';
 
 /**
  * 앱 상태. 웹 store와 같은 모양 — 액션이 저장과 상태 갱신을 같이 한다.
@@ -40,6 +42,10 @@ export type AutoRange = 'today' | 'week';
 
 interface State {
   ready: boolean;
+  /** 9.1 로그인한 아이디. 없으면 게스트 — 이 기기에만 저장한다 */
+  account: { username: string } | null;
+  /** 7장 동기화 상태 — 설정 탭에 보인다 */
+  syncStatus: SyncStatus;
   /**
    * load()가 실패하면 여기 남는다.
    * 예전엔 그냥 rejected promise로 사라져서 로딩 화면이 영원히 떠 있었고,
@@ -91,7 +97,7 @@ interface State {
   saveSleep: (sleep: SleepPattern) => Promise<void>;
   setGapMin: (min: number) => Promise<void>;
   saveRoutine: (r: Routine) => Promise<void>;
-  addRoutine: (draft: Omit<Routine, 'id' | 'user_id' | 'deleted_at' | 'rev'>) => Promise<string>;
+  addRoutine: (draft: Omit<Routine, 'id' | 'user_id' | 'deleted_at' | 'updated_at' | 'rev'>) => Promise<string>;
   removeRoutine: (id: string) => Promise<void>;
   selectTimetable: (id: string) => void;
   saveTimetable: (t: Timetable) => Promise<void>;
@@ -122,6 +128,7 @@ async function makeDefaultTimetable() {
     active_from: null,
     active_to: null,
     deleted_at: null,
+    updated_at: nowIso(),
     rev: 0,
   });
 }
@@ -141,9 +148,34 @@ function defaultSettings(): Settings {
 
 let loading: Promise<void> | null = null;
 
+/**
+ * 직접 뭔가를 처음 등록하는 순간 예시 데이터를 치운다 (core/demo.ts). 이미 치웠으면 아무 일도 없다.
+ * DB에서 지운 것을 화면 상태에서도 뺀다 — 다시 읽지 않고 걸러낸다. 웹 store와 같다.
+ */
+async function dropDemo() {
+  const del = await clearDemo();
+  if (!del) return;
+  const t = new Set(del.tasks);
+  const b = new Set(del.blocks);
+  const g = new Set(del.tags);
+  useStore.setState((s) => ({
+    tasks: s.tasks.filter((x) => !t.has(x.id)),
+    blocks: s.blocks.filter((x) => !b.has(x.id)),
+    tags: s.tags.filter((x) => !g.has(x.id)),
+    taskTags: Object.fromEntries(
+      Object.entries(s.taskTags)
+        .filter(([taskId]) => !t.has(taskId))
+        .map(([taskId, ids]) => [taskId, ids.filter((id) => !g.has(id))]),
+    ),
+    selectedTaskId: s.selectedTaskId && t.has(s.selectedTaskId) ? null : s.selectedTaskId,
+  }));
+}
+
 export const useStore = create<State>((set, get) => ({
   ready: false,
   error: null,
+  account: null,
+  syncStatus: { state: 'off', lastAt: null, error: null },
   tasks: [],
   blocks: [],
   tags: [],
@@ -234,6 +266,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async addTask(draft, opts = {}) {
+    await dropDemo();
     const now = new Date().toISOString();
     const maxOrder = get().tasks.reduce((m, t) => Math.max(m, t.sort_order), 0);
     const task: Task = {
@@ -311,6 +344,7 @@ export const useStore = create<State>((set, get) => ({
       is_all_day: false,
       source: 'drag',
       deleted_at: null,
+      updated_at: nowIso(),
       rev: 0,
     });
     return fit;
@@ -322,6 +356,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async addTag(name, color) {
+    await dropDemo();
     const clean = name.trim();
     if (!clean) return null;
     // UNIQUE(user_id, name) — 5장
@@ -351,6 +386,7 @@ export const useStore = create<State>((set, get) => ({
       color,
       sort_order: get().tags.length,
       deleted_at: null,
+      updated_at: nowIso(),
       rev: 0,
     });
     set((s) => ({ tags: [...s.tags, tag] }));
@@ -427,6 +463,7 @@ export const useStore = create<State>((set, get) => ({
    * 시작일이 있으면 그 앞의 열린 시간표를 전날로 닫는다.
    */
   async addTimetable(name, from) {
+    await dropDemo();
     const id = newId();
     if (from) {
       const prevDay = ymd(new Date(new Date(`${from}T00:00:00`).getTime() - 864e5));
@@ -443,6 +480,7 @@ export const useStore = create<State>((set, get) => ({
       active_from: from,
       active_to: null,
       deleted_at: null,
+      updated_at: nowIso(),
       rev: 0,
     });
     set({ currentTimetableId: id });
@@ -476,7 +514,8 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async addRoutine(draft) {
-    const r: Routine = { ...draft, id: newId(), user_id: 'local-user', deleted_at: null, rev: 0 };
+    await dropDemo();
+    const r: Routine = { ...draft, id: newId(), user_id: 'local-user', deleted_at: null, updated_at: nowIso(), rev: 0 };
     await get().saveRoutine(r);
     return r.id;
   },
